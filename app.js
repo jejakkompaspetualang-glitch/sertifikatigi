@@ -23,51 +23,74 @@ function apiConfigured() {
  * Panggil backend. POST memakai Content-Type text/plain agar browser tidak mengirim preflight CORS
  * (Apps Script tidak menjawab OPTIONS). Backend selalu membalas JSON {ok, data|error}.
  */
+const BACKEND_HINT = 'Backend Apps Script belum benar: fungsi doGet/doPost tidak ditemukan. Simpan Code.gs, lalu Deploy > Kelola deployment > Edit > Versi baru > Deploy.';
+
+/** Apps Script membalas HTML (bukan JSON) saat deployment salah; terjemahkan menjadi pesan yang jelas. */
+function parseBackend(text) {
+  try { return JSON.parse(text); } catch (e) { /* bukan JSON */ }
+  console.error(/Script function not found/i.test(text) ? BACKEND_HINT : 'Respons backend bukan JSON. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.');
+  throw new Error('Layanan sedang mengalami gangguan. Silakan coba beberapa saat lagi atau hubungi panitia.');
+}
+
 async function api(action, payload) {
-  if (!apiConfigured()) throw new Error('Alamat server belum diatur. Isi API_URL di app.js dengan URL Web App berakhiran /exec.');
+  if (!apiConfigured()) { console.error('API_URL belum diatur dengan URL Web App berakhiran /exec.'); throw new Error('Layanan belum dapat diakses. Silakan hubungi panitia.'); }
   const controller = new AbortController();
   const timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
-  let res;
+  let text;
   try {
-    res = await fetch(API_URL, {
+    const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(Object.assign({ action: action }, payload || {})),
       signal: controller.signal
     });
+    text = await res.text();
   } catch (err) {
     throw new Error(err && err.name === 'AbortError'
-      ? 'Server tidak merespons tepat waktu. Muat ulang daftar untuk memeriksa hasilnya sebelum mencoba lagi.'
-      : 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      ? 'Server belum merespons dalam batas waktu. Silakan muat ulang daftar untuk memeriksa hasilnya sebelum mencoba kembali.'
+      : 'Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.');
   } finally {
     clearTimeout(timer);
   }
-  let json;
-  try {
-    json = await res.json();
-  } catch (err) {
-    throw new Error('Respons server tidak valid. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.');
-  }
-  if (!json || json.ok !== true) throw new Error((json && json.error) || 'Permintaan gagal.');
+  const json = parseBackend(text);
+  if (!json || json.ok !== true) throw new Error((json && json.error) || 'Permintaan tidak dapat diproses.');
   return json.data;
+}
+
+const CFG_KEY = 'ngabasoCfg';
+
+function applyConfig(cfg) {
+  // Teks bawaan ada di index.html; nilai dari backend hanya menimpa jika terisi.
+  if (cfg.eventName) { $('eventName').textContent = cfg.eventName; document.title = cfg.eventName + ' - Sertifikat Digital'; }
+  if (cfg.eventTheme) $('eventTheme').textContent = cfg.eventTheme;
+  if (cfg.eventDescription) $('eventDesc').textContent = cfg.eventDescription;
+  $('eventDate').textContent = cfg.eventDate || '';
+  $('eventDate').classList.toggle('hidden', !cfg.eventDate);
+  if (cfg.orgName) $('orgName').textContent = cfg.orgName;
+  renderLineup(cfg);
+}
+
+/** Tampilkan konfigurasi tersimpan dulu (instan), lalu segarkan dari server. */
+function loadCachedConfig() {
+  try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c && typeof c === 'object') applyConfig(c); } catch (e) { /* abaikan */ }
 }
 
 async function loadConfig() {
   if (!apiConfigured()) return;
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, 20000);
   try {
-    const res = await fetch(API_URL + '?action=config');
-    const json = await res.json();
+    const res = await fetch(API_URL + '?action=config', { signal: controller.signal });
+    const json = parseBackend(await res.text());
     if (!json || json.ok !== true) return;
     const cfg = json.data || {};
-    // Teks bawaan ada di index.html; nilai dari backend hanya menimpa jika terisi.
-    if (cfg.eventName) { $('eventName').textContent = cfg.eventName; document.title = cfg.eventName + ' - Sertifikat Digital'; }
-    if (cfg.eventTheme) $('eventTheme').textContent = cfg.eventTheme;
-    if (cfg.eventDescription) $('eventDesc').textContent = cfg.eventDescription;
-    if (cfg.eventDate) { $('eventDate').textContent = cfg.eventDate; $('eventDate').classList.remove('hidden'); }
-    if (cfg.orgName) $('orgName').textContent = cfg.orgName;
-    renderLineup(cfg);
+    applyConfig(cfg);
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) { /* kuota/izin */ }
   } catch (err) {
     // Konfigurasi hanya mempercantik judul; formulir tetap dapat dipakai.
+    console.warn('[config] ' + (err && err.message));
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -76,6 +99,8 @@ function showView(view) {
   $('adminView').classList.toggle('hidden', view !== 'admin');
   $('publicTab').classList.toggle('active', view === 'public');
   $('adminTab').classList.toggle('active', view === 'admin');
+  $('publicTab').setAttribute('aria-pressed', String(view === 'public'));
+  $('adminTab').setAttribute('aria-pressed', String(view === 'admin'));
 }
 
 function message(id, text, kind) {
@@ -107,13 +132,14 @@ async function onSubmitAttendance(ev) {
     website: $('website').value
   };
   setBusy('submitBtn', true, 'Mengirim...');
-  message('publicMessage', 'Sedang mengirim formulir...', '');
+  message('publicMessage', 'Formulir sedang dikirim...', '');
   try {
     const res = await api('submit', { form: data });
-    message('publicMessage', res.message, res.ok ? 'success' : 'warning');
-    if (res.ok) form.reset();
+    const ok = !res || res.ok !== false;
+    message('publicMessage', (res && res.message) || (ok ? 'Formulir berhasil dikirim.' : 'Formulir belum dapat diproses.'), ok ? 'success' : 'warning');
+    if (ok) form.reset();
   } catch (err) {
-    message('publicMessage', err.message || 'Terjadi kesalahan. Coba lagi.', 'error');
+    message('publicMessage', err.message || 'Terjadi kesalahan. Silakan coba kembali.', 'error');
   } finally {
     setBusy('submitBtn', false, 'Kirim Formulir');
   }
@@ -122,16 +148,17 @@ async function onSubmitAttendance(ev) {
 async function onLogin(ev) {
   ev.preventDefault();
   const password = $('adminPassword').value;
-  setBusy('loginBtn', true, 'Memeriksa...');
-  message('loginMessage', 'Memeriksa akses...', '');
+  setBusy('loginBtn', true, 'Memverifikasi...');
+  message('loginMessage', 'Memverifikasi akses...', '');
   try {
     const res = await api('login', { password: password });
+    if (!res || !res.token) throw new Error('Sesi tidak dapat dibuat. Silakan coba kembali.');
     adminToken = res.token;
     $('loginPanel').classList.add('hidden');
     $('dashboard').classList.remove('hidden');
     $('adminPassword').value = '';
     message('loginMessage', '', '');
-    message('adminMessage', 'Berhasil masuk. Sesi berlaku hingga 6 jam atau cache berakhir.', 'success');
+    message('adminMessage', 'Berhasil masuk. Sesi berlaku hingga 6 jam.', 'success');
     loadSubmissions();
   } catch (err) {
     message('loginMessage', err.message || 'Gagal masuk.', 'error');
@@ -140,28 +167,35 @@ async function onLogin(ev) {
   }
 }
 
+let listSeq = 0;
 async function loadSubmissions() {
   if (!adminToken) return;
   const list = $('submissionList');
   const filter = $('statusFilter').value;
   const tokenAtRequest = adminToken;
+  const seq = ++listSeq;
   list.textContent = 'Memuat data...';
   try {
     const items = await api('list', { token: tokenAtRequest, filter: filter });
-    if (tokenAtRequest !== adminToken) return; // pengguna sudah keluar saat menunggu
-    if ($('statusFilter').value !== filter) return; // filter berganti; permintaan yang lebih baru yang menang
-    renderSubmissions(items);
+    if (seq !== listSeq || tokenAtRequest !== adminToken) return; // ada permintaan lebih baru / sudah keluar
+    renderSubmissions(Array.isArray(items) ? items : []);
   } catch (err) {
+    if (seq !== listSeq || tokenAtRequest !== adminToken) return;
     list.textContent = err.message || 'Gagal memuat data.';
     if (isSessionError(err)) logoutAdmin(false, err.message);
   }
+}
+
+function fmtDate(v) {
+  const d = v ? new Date(v) : null;
+  return d && !isNaN(d) ? d.toLocaleString('id-ID') : '-';
 }
 
 function renderSubmissions(items) {
   const list = $('submissionList');
   list.innerHTML = '';
   if (!items.length) {
-    const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Tidak ada data untuk filter ini.'; list.appendChild(p); return;
+    const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Tidak ada data untuk filter yang dipilih.'; list.appendChild(p); return;
   }
   items.forEach(function (item) {
     const card = document.createElement('article'); card.className = 'submissionCard';
@@ -172,7 +206,7 @@ function renderSubmissions(items) {
     const details = document.createElement('div'); details.className = 'details';
     [
       ['Email', item.email], ['Kategori', item.category], ['Instansi', item.organization || '-'],
-      ['Catatan', item.attendanceNote || '-'], ['Dikirim pada', item.timestamp ? new Date(item.timestamp).toLocaleString('id-ID') : '-'],
+      ['Catatan', item.attendanceNote || '-'], ['Dikirim pada', fmtDate(item.timestamp)],
       ['Nomor sertifikat', item.certificateNo || '-'], ['Pesan terakhir', item.lastError || '-']
     ].forEach(function (pair) {
       const p = document.createElement('p');
@@ -190,7 +224,7 @@ function renderSubmissions(items) {
         runAction('approve', item.id, note.value);
       }));
       actions.appendChild(actionButton('Tolak data', 'danger', function () {
-        if (!note.value.trim()) { alert('Tuliskan alasan penolakan terlebih dahulu.'); return; }
+        if (!note.value.trim()) { alert('Mohon isi alasan penolakan terlebih dahulu.'); return; }
         if (!confirm('Tolak data ' + item.fullName + '?')) return;
         runAction('reject', item.id, note.value);
       }));
@@ -200,7 +234,7 @@ function renderSubmissions(items) {
         runAction('retry', item.id, '');
       }));
     }
-    if (item.fileUrl) {
+    if (/^https:\/\//i.test(item.fileUrl || '')) {
       const link = document.createElement('a'); link.className = 'fileLink';
       link.href = item.fileUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
       link.textContent = 'Buka PDF di Drive'; actions.appendChild(link);
@@ -220,12 +254,12 @@ async function runAction(action, id, note) {
   actionRunning = true;
   const buttons = $('submissionList').querySelectorAll('button');
   buttons.forEach(function (b) { b.disabled = true; });
-  message('adminMessage', 'Memproses tindakan... (membuat PDF dan mengirim email dapat memakan waktu beberapa detik)', '');
+  message('adminMessage', 'Sedang memproses. Pembuatan PDF dan pengiriman email memerlukan beberapa saat.', '');
   try {
     const res = await api(action, { token: adminToken, id: id, note: note });
-    message('adminMessage', (res && res.message) || 'Selesai.', res && res.ok === false ? 'warning' : 'success');
+    message('adminMessage', (res && res.message) || 'Proses selesai.', res && res.ok === false ? 'warning' : 'success');
   } catch (err) {
-    message('adminMessage', err.message || 'Tindakan gagal.', 'error');
+    message('adminMessage', err.message || 'Proses tidak berhasil.', 'error');
     if (isSessionError(err)) { actionRunning = false; logoutAdmin(false, err.message); return; }
   } finally {
     actionRunning = false;
@@ -243,24 +277,26 @@ function logoutAdmin(callServer, reason) {
   $('adminPassword').value = '';
   settingsLoaded = false;
   showAdminPanel('validation');
-  $('submissionList').textContent = 'Masuk untuk memuat data.';
+  $('submissionList').textContent = 'Silakan masuk untuk memuat data.';
   message('loginMessage', reason || 'Anda telah keluar.', reason ? 'warning' : '');
 }
 
 /* ===== Daftar pembicara (publik) dan pengaturan acara (admin) ===== */
 const ROLES = [
-  { key: 'keynote', label: 'Keynote Speaker', max: 3 },
+  { key: 'keynote', label: 'Pembicara Utama', max: 3 },
   { key: 'narasumber', label: 'Narasumber', max: 10 },
   { key: 'moderator', label: 'Moderator', max: 5 },
-  { key: 'mc', label: 'MC', max: 3 }
+  { key: 'mc', label: 'Pembawa Acara', max: 3 }
 ];
 const ASSETS = [
-  { key: 'logo', label: 'Logo', hint: 'Tampil di atas sertifikat.' },
-  { key: 'stamp', label: 'Stempel', hint: 'Di samping tanda tangan.' },
-  { key: 'signature', label: 'Tanda tangan', hint: 'Di atas nama penandatangan.' }
+  { key: 'logo', label: 'Logo', hint: 'Ditampilkan pada bagian atas sertifikat.' },
+  { key: 'stamp', label: 'Stempel', hint: 'Diletakkan di samping tanda tangan.' },
+  { key: 'signature', label: 'Tanda tangan', hint: 'Diletakkan di atas nama penandatangan.' }
 ];
 const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'certificateText', 'signerName', 'signerTitle'];
 let settingsLoaded = false;
+let DEFAULT_LINEUP = '';
+let customLineup = false;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -276,8 +312,12 @@ function initials(name) {
 
 function renderLineup(cfg) {
   const groups = ROLES.filter(function (r) { return Array.isArray(cfg[r.key]) && cfg[r.key].length; });
-  if (!groups.length) return; // tidak ada data: pertahankan tampilan bawaan di HTML
   const dl = $('peopleList');
+  if (!groups.length) { // tidak ada data: pakai tampilan bawaan di HTML
+    if (customLineup) { dl.innerHTML = DEFAULT_LINEUP; customLineup = false; }
+    return;
+  }
+  customLineup = true;
   dl.textContent = '';
   groups.forEach(function (r) {
     cfg[r.key].forEach(function (p) {
@@ -370,7 +410,7 @@ function readFileAsDataUrl(file) {
   return new Promise(function (resolve, reject) {
     const r = new FileReader();
     r.onload = function () { resolve(r.result); };
-    r.onerror = function () { reject(new Error('File tidak dapat dibaca.')); };
+    r.onerror = function () { reject(new Error('Berkas tidak dapat dibaca.')); };
     r.readAsDataURL(file);
   });
 }
@@ -379,7 +419,7 @@ function loadImage(src) {
   return new Promise(function (resolve, reject) {
     const i = new Image();
     i.onload = function () { resolve(i); };
-    i.onerror = function () { reject(new Error('File gambar tidak dapat dibaca.')); };
+    i.onerror = function () { reject(new Error('Berkas gambar tidak dapat dibaca.')); };
     i.src = src;
   });
 }
@@ -398,7 +438,7 @@ async function shrinkImage(file) {
     if (out.length < 1200000) return out;
     max = Math.round(max * 0.7);
   }
-  throw new Error('Gambar terlalu rumit. Gunakan gambar yang lebih sederhana.');
+  throw new Error('Ukuran gambar terlalu besar. Silakan gunakan gambar dengan resolusi lebih rendah.');
 }
 
 async function onAssetChosen(asset, input) {
@@ -411,7 +451,7 @@ async function onAssetChosen(asset, input) {
     setAssetPreview(asset.key, res.preview);
     message('adminMessage', asset.label + ' berhasil disimpan.', 'success');
   } catch (err) {
-    message('adminMessage', err.message || 'Unggah gagal.', 'error');
+    message('adminMessage', err.message || 'Unggah tidak berhasil.', 'error');
     if (isSessionError(err)) logoutAdmin(false, err.message);
   } finally {
     input.value = '';
@@ -483,6 +523,9 @@ $('reloadBtn').addEventListener('click', loadSubmissions);
 $('statusFilter').addEventListener('change', loadSubmissions);
 
 if (!apiConfigured()) {
-  message('publicMessage', 'Konfigurasi belum lengkap: isi API_URL di app.js dengan URL Web App Apps Script.', 'warning');
+  message('publicMessage', 'Layanan pendaftaran belum tersedia. Silakan hubungi panitia.', 'warning');
 }
+DEFAULT_LINEUP = $('peopleList').innerHTML;
+showView('public');
+loadCachedConfig();
 loadConfig();
