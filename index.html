@@ -4,17 +4,35 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://*.googleusercontent.com; base-uri 'none'; form-action 'none'">
-  <title>Sertifikat Digital</title>
+  <meta name="description" content="Ngabaso IGA Edisi #22 - Pemanfaatan Canva dan Cloud Service dalam Pembuatan Video Pembelajaran Interaktif. IGI Kabupaten Garut.">
+  <title>Ngabaso IGA Edisi #22 - Sertifikat Digital</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="shell">
     <header class="hero">
-      <div class="eyebrow">SERTIFIKAT DIGITAL</div>
-      <h1 id="eventName">Sertifikat Digital</h1>
-      <p id="eventDesc"></p>
+      <p class="org" id="orgName">Ikatan Guru Indonesia (IGI) Kabupaten Garut</p>
+      <h1 id="eventName">NGABASO IGA EDISI #22</h1>
+      <p class="theme" id="eventTheme">Pemanfaatan Canva dan Cloud Service dalam Pembuatan Video Pembelajaran Interaktif</p>
       <p class="date hidden" id="eventDate"></p>
+      <p class="lead" id="eventDesc">Ruang belajar bersama bagi guru semua jenjang yang hadir setiap pekan. Bersama kita belajar merancang video pembelajaran yang interaktif, rapi, dan mudah dibagikan kepada murid.</p>
+      <ul class="chips" aria-label="Informasi kegiatan">
+        <li>Via Zoom</li>
+        <li>Setiap pekan</li>
+        <li>Guru semua jenjang</li>
+      </ul>
+      <p class="tagline"><span>Sharing and Growing Together</span><span>Pantang Mengajar Kalau Tidak Belajar</span></p>
     </header>
+
+    <section class="lineup" aria-labelledby="lineupTitle">
+      <h2 id="lineupTitle">Pembicara dan petugas</h2>
+      <dl class="people" id="peopleList">
+        <div><span class="avatar" aria-hidden="true">IO</span><dt>Keynote Speaker</dt><dd>Ita Octavia, S.Ag., M.Pd.I<small>Ketua IGI Kab. Garut</small></dd></div>
+        <div><span class="avatar" aria-hidden="true">FF</span><dt>Narasumber</dt><dd>Fahrul Fauzi, S.Pd., Gr.</dd></div>
+        <div><span class="avatar" aria-hidden="true">LS</span><dt>Moderator</dt><dd>Luna Septiani, S.Pd<small>Pengurus IGI Kab. Garut</small></dd></div>
+        <div><span class="avatar" aria-hidden="true">DA</span><dt>MC</dt><dd>Dian Andriani, M.Pd<small>Pengurus IGI Kab. Garut</small></dd></div>
+      </dl>
+    </section>
 
     <nav class="tabs" aria-label="Navigasi">
       <button class="tab active" id="publicTab" type="button">Formulir Kehadiran</button>
@@ -23,7 +41,7 @@
 
     <section id="publicView" class="panel">
       <h2>Formulir Kehadiran</h2>
-      <p class="muted">Isi data dengan benar. Sertifikat dikirim setelah data diperiksa dan disetujui admin.</p>
+      <p class="muted">Isi data dengan benar. Sertifikat dikirim ke email Anda setelah data diperiksa dan disetujui admin.</p>
       <form id="attendanceForm">
         <label for="fullName">Nama lengkap sesuai sertifikat <span>*</span></label>
         <input id="fullName" name="fullName" required minlength="3" maxlength="120" autocomplete="name">
@@ -39,11 +57,11 @@
           <option>Panitia</option>
         </select>
 
-        <label for="organization">Instansi / organisasi (opsional)</label>
+        <label for="organization">Instansi / sekolah (opsional)</label>
         <input id="organization" name="organization" maxlength="160">
 
         <label for="attendanceNote">Catatan kehadiran (opsional)</label>
-        <textarea id="attendanceNote" name="attendanceNote" rows="3" maxlength="500" placeholder="Contoh: sesi pagi / nomor peserta"></textarea>
+        <textarea id="attendanceNote" name="attendanceNote" rows="3" maxlength="500" placeholder="Contoh: hadir penuh sampai selesai"></textarea>
 
         <div class="hp" aria-hidden="true">
           <label for="website">Jangan diisi</label>
@@ -69,28 +87,68 @@
 
       <div id="dashboard" class="hidden">
         <div class="dashboardHead">
-          <div><h2>Validasi Data</h2><p class="muted">Setujui hanya data yang sudah diperiksa.</p></div>
+          <div><h2>Panel Admin</h2><p class="muted">Validasi data kehadiran dan atur acara.</p></div>
           <button class="secondary small" id="logoutBtn" type="button">Keluar</button>
         </div>
-        <div class="toolbar">
-          <label for="statusFilter">Tampilkan</label>
-          <select id="statusFilter">
-            <option value="MENUNGGU VALIDASI">Menunggu validasi</option>
-            <option value="GAGAL">Gagal dikirim</option>
-            <option value="DISETUJUI">Disetujui / belum selesai</option>
-            <option value="SEDANG DIPROSES">Sedang diproses / tertahan</option>
-            <option value="TERKIRIM">Terkirim</option>
-            <option value="DITOLAK">Ditolak</option>
-            <option value="SEMUA">Semua data</option>
-          </select>
-          <button class="secondary small" id="reloadBtn" type="button">Muat ulang</button>
+        <div class="subtabs">
+          <button class="subtab active" id="validationTab" type="button">Validasi Data</button>
+          <button class="subtab" id="settingsTab" type="button">Pengaturan Acara</button>
         </div>
         <div id="adminMessage" class="message" role="status" aria-live="polite"></div>
-        <div id="submissionList" class="submissionList"><p class="muted">Masuk untuk memuat data.</p></div>
+
+        <div id="validationPanel">
+          <div class="toolbar">
+            <label for="statusFilter">Tampilkan</label>
+            <select id="statusFilter">
+              <option value="MENUNGGU VALIDASI">Menunggu validasi</option>
+              <option value="GAGAL">Gagal dikirim</option>
+              <option value="DISETUJUI">Disetujui / belum selesai</option>
+              <option value="SEDANG DIPROSES">Sedang diproses / tertahan</option>
+              <option value="TERKIRIM">Terkirim</option>
+              <option value="DITOLAK">Ditolak</option>
+              <option value="SEMUA">Semua data</option>
+            </select>
+            <button class="secondary small" id="reloadBtn" type="button">Muat ulang</button>
+          </div>
+          <div id="submissionList" class="submissionList"><p class="muted">Masuk untuk memuat data.</p></div>
+        </div>
+
+        <form id="settingsPanel" class="hidden" novalidate>
+          <fieldset>
+            <legend>Informasi acara</legend>
+            <label for="s_orgName">Nama organisasi</label>
+            <input id="s_orgName" maxlength="160">
+            <label for="s_eventName">Judul kegiatan <span>*</span></label>
+            <input id="s_eventName" maxlength="120">
+            <label for="s_eventTheme">Tema</label>
+            <input id="s_eventTheme" maxlength="200">
+            <label for="s_eventDate">Hari dan tanggal</label>
+            <input id="s_eventDate" maxlength="120" placeholder="Contoh: Sabtu, 11 Oktober 2026, pukul 19.30 WIB">
+            <label for="s_eventDescription">Deskripsi singkat (tampil di halaman depan)</label>
+            <textarea id="s_eventDescription" rows="3" maxlength="600"></textarea>
+          </fieldset>
+          <fieldset>
+            <legend>Pembicara dan petugas</legend>
+            <p class="muted">Kosongkan semua daftar untuk memakai tampilan bawaan. Baris yang kosong diabaikan.</p>
+            <div id="peopleEditor"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Sertifikat</legend>
+            <label for="s_certificateText">Kalimat apresiasi</label>
+            <input id="s_certificateText" maxlength="200">
+            <label for="s_signerName">Nama penandatangan</label>
+            <input id="s_signerName" maxlength="120">
+            <label for="s_signerTitle">Jabatan penandatangan</label>
+            <input id="s_signerTitle" maxlength="120">
+            <p class="muted assetNote">Unggah PNG transparan agar tanda tangan dan stempel tampak rapi. Gambar langsung tersimpan saat dipilih.</p>
+            <div id="assetEditor" class="assets"></div>
+          </fieldset>
+          <button class="primary" id="saveSettingsBtn" type="submit">Simpan pengaturan</button>
+        </form>
       </div>
     </section>
 
-    <footer>Jangan membagikan kata sandi admin. Sertifikat hanya diterbitkan setelah validasi.</footer>
+    <footer>Ngabaso IGA diselenggarakan IGI Kabupaten Garut. Jangan membagikan kata sandi admin. Sertifikat hanya diterbitkan setelah validasi.</footer>
   </main>
 
   <script src="app.js" defer></script>
