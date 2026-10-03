@@ -129,8 +129,8 @@
             <input id="s_eventName" maxlength="120">
             <label for="s_eventTheme">Tema</label>
             <input id="s_eventTheme" maxlength="200">
-            <label for="s_eventDate">Hari dan tanggal</label>
-            <input id="s_eventDate" maxlength="120" placeholder="Contoh: Sabtu, 11 Oktober 2026, pukul 19.30 WIB">
+            <label for="s_eventDate">Tanggal pelaksanaan (dipakai pada sertifikat)</label>
+            <input id="s_eventDate" maxlength="120" placeholder="Contoh: 11 Oktober 2026">
             <label for="s_eventDescription">Deskripsi singkat (ditampilkan pada halaman utama)</label>
             <textarea id="s_eventDescription" rows="3" maxlength="600"></textarea>
           </fieldset>
@@ -141,8 +141,14 @@
           </fieldset>
           <fieldset>
             <legend>Sertifikat</legend>
-            <label for="s_certificateText">Kalimat apresiasi</label>
-            <input id="s_certificateText" maxlength="200">
+            <label for="s_certificateText" class="hidden">Kalimat apresiasi</label>
+            <input id="s_certificateText" maxlength="200" class="hidden">
+            <label for="s_eventDuration">Durasi kegiatan (JP)</label>
+            <input id="s_eventDuration" maxlength="20" inputmode="numeric" placeholder="Contoh: 2">
+            <label for="s_certificatePlace">Kota penerbitan sertifikat</label>
+            <input id="s_certificatePlace" maxlength="60" placeholder="Garut">
+            <label for="s_certificateDate">Tanggal penerbitan (kosongkan = tanggal persetujuan)</label>
+            <input id="s_certificateDate" maxlength="60" placeholder="Contoh: 11 Oktober 2026">
             <label for="s_signerName">Nama penandatangan</label>
             <input id="s_signerName" maxlength="120">
             <label for="s_signerTitle">Jabatan penandatangan</label>
