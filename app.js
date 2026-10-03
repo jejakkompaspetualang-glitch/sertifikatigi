@@ -7,7 +7,7 @@
  */
 
 // Alamat Web App Apps Script (berakhiran /exec). Alamat ini publik, bukan rahasia.
-const API_URL = 'GANTI_DENGAN_URL_WEB_APP_EXEC';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyJuN4OO3pHJxnuFSLOZkArDKUz_XWbhX5Q1FOxab09MXTr86aVA431aeq6t5iHFbch/exec';
 const REQUEST_TIMEOUT_MS = 90000; // membuat PDF + mengirim email dapat memakan waktu puluhan detik
 
 let adminToken = '';
