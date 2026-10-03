@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="eyebrow">SERTIFIKAT DIGITAL</div>
+      <h1><?= appConfig.eventName ?></h1>
+      <p><?= appConfig.eventDescription ?></p>
+      <? if (appConfig.eventDate) { ?><p class="date"><?= appConfig.eventDate ?></p><? } ?>
+    </header>
+
+    <nav class="tabs" aria-label="Navigasi">
+      <button class="tab active" id="publicTab" type="button" onclick="showView('public')">Formulir Kehadiran</button>
+      <button class="tab" id="adminTab" type="button" onclick="showView('admin')">Admin</button>
+    </nav>
+
+    <section id="publicView" class="panel">
+      <h2>Formulir Kehadiran</h2>
+      <p class="muted">Isi data dengan benar. Sertifikat dikirim setelah data diperiksa dan disetujui admin.</p>
+      <form id="attendanceForm">
+        <label for="fullName">Nama lengkap sesuai sertifikat <span>*</span></label>
+        <input id="fullName" name="fullName" required minlength="3" maxlength="120" autocomplete="name">
+
+        <label for="email">Email aktif penerima sertifikat <span>*</span></label>
+        <input id="email" name="email" type="email" required maxlength="254" autocomplete="email">
+
+        <label for="category">Kategori penerima <span>*</span></label>
+        <select id="category" name="category" required>
+          <option value="">Pilih kategori</option>
+          <option>Peserta</option>
+          <option>Narasumber</option>
+          <option>Panitia</option>
+        </select>
+
+        <label for="organization">Instansi / organisasi (opsional)</label>
+        <input id="organization" name="organization" maxlength="160">
+
+        <label for="attendanceNote">Catatan kehadiran (opsional)</label>
+        <textarea id="attendanceNote" name="attendanceNote" rows="3" maxlength="500" placeholder="Contoh: sesi pagi / nomor peserta"></textarea>
+
+        <div class="hp" aria-hidden="true">
+          <label for="website">Jangan diisi</label>
+          <input id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <label class="consent"><input type="checkbox" id="confirmData" required> Saya memastikan data yang dikirim benar dan menyetujui penggunaannya untuk verifikasi kehadiran serta pengiriman sertifikat.</label>
+        <button class="primary" id="submitBtn" type="submit">Kirim Formulir</button>
+      </form>
+      <div id="publicMessage" class="message" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="adminView" class="panel hidden">
+      <div id="loginPanel">
+        <h2>Masuk Admin</h2>
+        <p class="muted">Area ini hanya untuk pengelola kegiatan.</p>
+        <form id="loginForm">
+          <label for="adminPassword">Kata sandi admin</label>
+          <input id="adminPassword" type="password" required autocomplete="current-password">
+          <button class="primary" type="submit">Masuk</button>
+        </form>
+      </div>
+
+      <div id="dashboard" class="hidden">
+        <div class="dashboardHead">
+          <div><h2>Validasi Data</h2><p class="muted">Setujui hanya data yang sudah diperiksa.</p></div>
+          <button class="secondary small" type="button" onclick="logoutAdmin()">Keluar</button>
+        </div>
+        <div class="toolbar">
+          <label for="statusFilter">Tampilkan</label>
+          <select id="statusFilter" onchange="loadSubmissions()">
+            <option value="MENUNGGU VALIDASI">Menunggu validasi</option>
+            <option value="GAGAL">Gagal dikirim</option>
+            <option value="DISETUJUI">Disetujui / belum selesai</option>
+            <option value="SEDANG DIPROSES">Sedang diproses / tertahan</option>
+            <option value="TERKIRIM">Terkirim</option>
+            <option value="DITOLAK">Ditolak</option>
+            <option value="SEMUA">Semua data</option>
+          </select>
+          <button class="secondary small" type="button" onclick="loadSubmissions()">Muat ulang</button>
+        </div>
+        <div id="adminMessage" class="message" role="status" aria-live="polite"></div>
+        <div id="submissionList" class="submissionList"><p class="muted">Masuk untuk memuat data.</p></div>
+      </div>
+    </section>
+
+    <footer>Jangan membagikan kata sandi admin. Sertifikat hanya diterbitkan setelah validasi.</footer>
+  </main>
+
+  <script>
+    let adminToken = '';
+
+    function showView(view) {
+      document.getElementById('publicView').classList.toggle('hidden', view !== 'public');
+      document.getElementById('adminView').classList.toggle('hidden', view !== 'admin');
+      document.getElementById('publicTab').classList.toggle('active', view === 'public');
+      document.getElementById('adminTab').classList.toggle('active', view === 'admin');
+    }
+
+    function message(id, text, kind) {
+      const el = document.getElementById(id);
+      el.textContent = text || '';
+      el.className = 'message' + (kind ? ' ' + kind : '');
+    }
+
+    function setBusy(buttonId, busy, label) {
+      const btn = document.getElementById(buttonId);
+      btn.disabled = busy;
+      if (label) btn.textContent = label;
+    }
+
+    document.getElementById('attendanceForm').addEventListener('submit', function(ev) {
+      ev.preventDefault();
+      const form = ev.currentTarget;
+      if (!form.reportValidity()) return;
+      const data = {
+        fullName: document.getElementById('fullName').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        category: document.getElementById('category').value,
+        organization: document.getElementById('organization').value.trim(),
+        attendanceNote: document.getElementById('attendanceNote').value.trim(),
+        website: document.getElementById('website').value
+      };
+      setBusy('submitBtn', true, 'Mengirim...');
+      message('publicMessage', 'Sedang mengirim formulir...', '');
+      google.script.run
+        .withSuccessHandler(function(res) {
+          setBusy('submitBtn', false, 'Kirim Formulir');
+          message('publicMessage', res.message, res.ok ? 'success' : 'warning');
+          if (res.ok) { form.reset(); }
+        })
+        .withFailureHandler(function(err) {
+          setBusy('submitBtn', false, 'Kirim Formulir');
+          message('publicMessage', err.message || 'Terjadi kesalahan. Coba lagi.', 'error');
+        })
+        .submitAttendance(data);
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', function(ev) {
+      ev.preventDefault();
+      const password = document.getElementById('adminPassword').value;
+      message('adminMessage', 'Memeriksa akses...', '');
+      google.script.run
+        .withSuccessHandler(function(res) {
+          adminToken = res.token;
+          document.getElementById('loginPanel').classList.add('hidden');
+          document.getElementById('dashboard').classList.remove('hidden');
+          document.getElementById('adminPassword').value = '';
+          message('adminMessage', 'Berhasil masuk. Sesi berlaku hingga 6 jam atau cache berakhir.', 'success');
+          loadSubmissions();
+        })
+        .withFailureHandler(function(err) {
+          message('adminMessage', err.message || 'Gagal masuk.', 'error');
+        })
+        .adminLogin(password);
+    });
+
+    function loadSubmissions() {
+      if (!adminToken) return;
+      const filter = document.getElementById('statusFilter').value;
+      const list = document.getElementById('submissionList');
+      list.innerHTML = '<p class="muted">Memuat data...</p>';
+      google.script.run
+        .withSuccessHandler(renderSubmissions)
+        .withFailureHandler(function(err) {
+          list.textContent = err.message || 'Gagal memuat data.';
+          if ((err.message || '').toLowerCase().includes('sesi')) logoutAdmin(false);
+        })
+        .getAdminSubmissions(adminToken, filter);
+    }
+
+    function renderSubmissions(items) {
+      const list = document.getElementById('submissionList');
+      list.innerHTML = '';
+      if (!items.length) {
+        const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Tidak ada data untuk filter ini.'; list.appendChild(p); return;
+      }
+      items.forEach(function(item) {
+        const card = document.createElement('article'); card.className = 'submissionCard';
+        const title = document.createElement('div'); title.className = 'cardTitle';
+        const name = document.createElement('h3'); name.textContent = item.fullName;
+        const badge = document.createElement('span'); badge.className = 'status'; badge.textContent = item.status;
+        title.append(name, badge); card.appendChild(title);
+        const details = document.createElement('div'); details.className = 'details';
+        [
+          ['Email', item.email], ['Kategori', item.category], ['Instansi', item.organization || '-'],
+          ['Catatan', item.attendanceNote || '-'], ['Dikirim pada', item.timestamp ? new Date(item.timestamp).toLocaleString('id-ID') : '-'],
+          ['Nomor sertifikat', item.certificateNo || '-'], ['Pesan terakhir', item.lastError || '-']
+        ].forEach(function(pair) {
+          const p = document.createElement('p');
+          const strong = document.createElement('strong'); strong.textContent = pair[0] + ': ';
+          p.append(strong, document.createTextNode(pair[1])); details.appendChild(p);
+        });
+        card.appendChild(details);
+        const note = document.createElement('textarea'); note.rows = 2; note.maxLength = 500;
+        note.placeholder = 'Catatan admin / alasan penolakan'; note.value = item.adminNote || '';
+        note.setAttribute('aria-label', 'Catatan admin untuk ' + item.fullName); card.appendChild(note);
+        const actions = document.createElement('div'); actions.className = 'actions';
+        if (item.status === 'MENUNGGU VALIDASI') {
+          actions.appendChild(actionButton('Setujui & kirim sertifikat', 'primary', function() {
+            if (!confirm('Setujui data ' + item.fullName + ' dan kirim sertifikat ke ' + item.email + '?')) return;
+            runAction('approve', item.id, note.value);
+          }));
+          actions.appendChild(actionButton('Tolak data', 'danger', function() {
+            if (!note.value.trim()) { alert('Tuliskan alasan penolakan terlebih dahulu.'); return; }
+            if (!confirm('Tolak data ' + item.fullName + '?')) return;
+            runAction('reject', item.id, note.value);
+          }));
+        } else if (item.status === 'GAGAL' || item.status === 'DISETUJUI' || item.status === 'SEDANG DIPROSES') {
+          actions.appendChild(actionButton('Coba kirim ulang', 'primary', function() {
+            if (!confirm('Coba kirim ulang sertifikat ke ' + item.email + '?')) return;
+            runAction('retry', item.id, '');
+          }));
+        }
+        if (item.fileUrl) {
+          const link = document.createElement('a'); link.className = 'fileLink';
+          link.href = item.fileUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          link.textContent = 'Buka PDF di Drive'; actions.appendChild(link);
+        }
+        card.appendChild(actions);
+        list.appendChild(card);
+      });
+    }
+
+    function actionButton(label, cls, callback) {
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = cls + ' small';
+      btn.textContent = label; btn.addEventListener('click', callback); return btn;
+    }
+
+    function runAction(action, id, note) {
+      message('adminMessage', 'Memproses tindakan...', '');
+      const runner = google.script.run
+        .withSuccessHandler(function(res) {
+          message('adminMessage', res.message || 'Selesai.', res.ok ? 'success' : 'warning');
+          loadSubmissions();
+        })
+        .withFailureHandler(function(err) {
+          message('adminMessage', err.message || 'Tindakan gagal.', 'error');
+          loadSubmissions();
+        });
+      if (action === 'approve') runner.approveSubmission(adminToken, id, note);
+      if (action === 'reject') runner.rejectSubmission(adminToken, id, note);
+      if (action === 'retry') runner.retryFailedCertificate(adminToken, id);
+    }
+
+    function logoutAdmin(callServer) {
+      const shouldCall = callServer !== false;
+      const oldToken = adminToken;
+      adminToken = '';
+      if (shouldCall && oldToken) google.script.run.adminLogout(oldToken);
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('loginPanel').classList.remove('hidden');
+      document.getElementById('adminPassword').value = '';
+      document.getElementById('submissionList').textContent = 'Masuk untuk memuat data.';
+      message('adminMessage', 'Anda telah keluar.', '');
+    }
+  </script>
+</body>
+</html>
