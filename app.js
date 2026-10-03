@@ -293,7 +293,7 @@ const ASSETS = [
   { key: 'stamp', label: 'Stempel', hint: 'Diletakkan di samping tanda tangan.' },
   { key: 'signature', label: 'Tanda tangan', hint: 'Diletakkan di atas nama penandatangan.' }
 ];
-const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'certificateText', 'signerName', 'signerTitle'];
+const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'certificateText', 'eventDuration', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle'];
 let settingsLoaded = false;
 let DEFAULT_LINEUP = '';
 let customLineup = false;
