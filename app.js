@@ -123,17 +123,18 @@ async function onLogin(ev) {
   ev.preventDefault();
   const password = $('adminPassword').value;
   setBusy('loginBtn', true, 'Memeriksa...');
-  message('adminMessage', 'Memeriksa akses...', '');
+  message('loginMessage', 'Memeriksa akses...', '');
   try {
     const res = await api('login', { password: password });
     adminToken = res.token;
     $('loginPanel').classList.add('hidden');
     $('dashboard').classList.remove('hidden');
     $('adminPassword').value = '';
+    message('loginMessage', '', '');
     message('adminMessage', 'Berhasil masuk. Sesi berlaku hingga 6 jam atau cache berakhir.', 'success');
     loadSubmissions();
   } catch (err) {
-    message('adminMessage', err.message || 'Gagal masuk.', 'error');
+    message('loginMessage', err.message || 'Gagal masuk.', 'error');
   } finally {
     setBusy('loginBtn', false, 'Masuk');
   }
@@ -152,7 +153,7 @@ async function loadSubmissions() {
     renderSubmissions(items);
   } catch (err) {
     list.textContent = err.message || 'Gagal memuat data.';
-    if (isSessionError(err)) logoutAdmin(false);
+    if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
 
@@ -225,14 +226,14 @@ async function runAction(action, id, note) {
     message('adminMessage', (res && res.message) || 'Selesai.', res && res.ok === false ? 'warning' : 'success');
   } catch (err) {
     message('adminMessage', err.message || 'Tindakan gagal.', 'error');
-    if (isSessionError(err)) { actionRunning = false; logoutAdmin(false); message('adminMessage', err.message, 'error'); return; }
+    if (isSessionError(err)) { actionRunning = false; logoutAdmin(false, err.message); return; }
   } finally {
     actionRunning = false;
   }
   loadSubmissions();
 }
 
-function logoutAdmin(callServer) {
+function logoutAdmin(callServer, reason) {
   const shouldCall = callServer !== false;
   const oldToken = adminToken;
   adminToken = '';
@@ -243,7 +244,7 @@ function logoutAdmin(callServer) {
   settingsLoaded = false;
   showAdminPanel('validation');
   $('submissionList').textContent = 'Masuk untuk memuat data.';
-  message('adminMessage', 'Anda telah keluar.', '');
+  message('loginMessage', reason || 'Anda telah keluar.', reason ? 'warning' : '');
 }
 
 /* ===== Daftar pembicara (publik) dan pengaturan acara (admin) ===== */
@@ -411,7 +412,7 @@ async function onAssetChosen(asset, input) {
     message('adminMessage', asset.label + ' berhasil disimpan.', 'success');
   } catch (err) {
     message('adminMessage', err.message || 'Unggah gagal.', 'error');
-    if (isSessionError(err)) logoutAdmin(false);
+    if (isSessionError(err)) logoutAdmin(false, err.message);
   } finally {
     input.value = '';
   }
@@ -425,7 +426,7 @@ async function removeAsset(asset) {
     message('adminMessage', asset.label + ' dihapus.', 'success');
   } catch (err) {
     message('adminMessage', err.message || 'Gagal menghapus.', 'error');
-    if (isSessionError(err)) logoutAdmin(false);
+    if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
 
@@ -444,7 +445,7 @@ async function loadSettings() {
     message('adminMessage', '', '');
   } catch (err) {
     message('adminMessage', err.message || 'Gagal memuat pengaturan.', 'error');
-    if (isSessionError(err)) logoutAdmin(false);
+    if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
 
@@ -461,7 +462,7 @@ async function onSaveSettings(ev) {
     loadConfig();
   } catch (err) {
     message('adminMessage', err.message || 'Gagal menyimpan.', 'error');
-    if (isSessionError(err)) logoutAdmin(false);
+    if (isSessionError(err)) logoutAdmin(false, err.message);
   } finally {
     setBusy('saveSettingsBtn', false, 'Simpan pengaturan');
   }
