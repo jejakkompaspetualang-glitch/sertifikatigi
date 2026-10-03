@@ -3,13 +3,9 @@
 (function () {
   'use strict';
   var ic = function (inner) { return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>'; };
-  var SILS = {
-    keynote: '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><path d="M25 44c0-18 8-28 17-28s17 10 17 28v20H25z" fill="#1b1f3a"/><path d="M8 84c1-19 15-25 34-25s33 6 34 25z" fill="#1d4fb8"/><path d="M34 61l8 14 8-14 6 2-14 21-14-21z" fill="#fff"/><rect x="37" y="50" width="10" height="13" rx="3" fill="#efc3a2"/><ellipse cx="42" cy="38" rx="11" ry="13" fill="#f6d5bd"/><path d="M30 37c1-11 8-16 14-14 6 1 9 7 9 14-5-6-14-9-23 0z" fill="#1b1f3a"/></svg>',
-    narasumber: '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><path d="M8 84c1-19 15-25 34-25s33 6 34 25z" fill="#0f2a63"/><path d="M34 60l8 15 8-15z" fill="#fff"/><path d="M40 64h4l1.5 14-3.5 3-3.5-3z" fill="#1d5bff"/><rect x="37" y="49" width="10" height="13" rx="3" fill="#efc3a2"/><ellipse cx="42" cy="37" rx="11" ry="13" fill="#f6d5bd"/><path d="M30 34c0-11 6-17 12-17s12 6 12 17c-4-5-8-7-12-7s-8 2-12 7z" fill="#1b1f3a"/></svg>',
-    moderator: '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><path d="M22 48c0-20 8-31 20-31s20 11 20 31v20H22z" fill="#0f3a8a"/><path d="M8 84c1-18 15-24 34-24s33 6 34 24z" fill="#1d4fb8"/><ellipse cx="42" cy="40" rx="10" ry="12" fill="#f6d5bd"/><path d="M31 38c1-9 7-13 11-13s10 4 11 13c-4-4-8-5-11-5s-7 1-11 5z" fill="#0f3a8a"/></svg>',
-    mc: '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><path d="M27 46c0-15 6-27 15-27s15 12 15 27c0 6-2 11-4 13H31c-2-2-4-7-4-13z" fill="#3a2418"/><path d="M8 84c1-19 15-25 34-25s33 6 34 25z" fill="#2f6bff"/><path d="M35 60l7 12 7-12z" fill="#f6d5bd"/><rect x="37" y="50" width="10" height="12" rx="3" fill="#efc3a2"/><ellipse cx="42" cy="38" rx="11" ry="13" fill="#f6d5bd"/><path d="M30 36c1-10 8-15 14-13 6 1 9 6 9 13-5-5-14-8-23 0z" fill="#3a2418"/></svg>',
-    other: '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><path d="M25 44c0-18 8-28 17-28s17 10 17 28v20H25z" fill="#1b1f3a"/><path d="M8 84c1-19 15-25 34-25s33 6 34 25z" fill="#1d4fb8"/><path d="M34 61l8 14 8-14 6 2-14 21-14-21z" fill="#fff"/><rect x="37" y="50" width="10" height="13" rx="3" fill="#efc3a2"/><ellipse cx="42" cy="38" rx="11" ry="13" fill="#f6d5bd"/><path d="M30 37c1-11 8-16 14-14 6 1 9 7 9 14-5-6-14-9-23 0z" fill="#1b1f3a"/></svg>'
-  };
+  // Siluet netral: tidak bergantung pada jenis kelamin pembicara. Peran dibedakan oleh lencana.
+  var NEUTRAL = '<svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="33" r="13" fill="#1d4fb8"/><path d="M14 84c1-17 12-25 28-25s27 8 28 25z" fill="#1d4fb8"/></svg>';
+  var SILS = { keynote: NEUTRAL, narasumber: NEUTRAL, moderator: NEUTRAL, mc: NEUTRAL, other: NEUTRAL };
   var BADGE = {
     keynote: ic('<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>'),
     narasumber: ic('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/>'),
@@ -94,4 +90,13 @@
       if (el) new MutationObserver(run).observe(el, { childList: true, subtree: true, characterData: true });
     });
   }
+  // Klik tab: gulir ke panel terkait. Tidak mengubah logika tab di app.js.
+  [['publicTab', 'publicView'], ['adminTab', 'adminView']].forEach(function (p) {
+    var tab = document.getElementById(p[0]);
+    if (!tab) return;
+    tab.addEventListener('click', function () {
+      var panel = document.getElementById(p[1]);
+      if (panel && panel.scrollIntoView) setTimeout(function () { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
+    });
+  });
 })();
