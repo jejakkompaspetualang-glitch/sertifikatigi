@@ -74,6 +74,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
 .hov .cursor{opacity:.8}
 .dot{stroke-width:2.5;fill:#fff}.dot-sub{stroke:#8fb0ff}.dot-ver{stroke:var(--blue)}.dot-sent{stroke:var(--gold)}
 .hit{fill:transparent;cursor:crosshair;outline:none}
+.hit:focus-visible{fill:var(--sky)}
 .tip{position:absolute;top:6px;z-index:2;min-width:168px;padding:11px 14px;border-radius:14px;background:#061a52f2;color:#fff;font-size:.78rem;box-shadow:0 18px 36px -10px #061a5280;border:1px solid #ffffff22;pointer-events:none;opacity:0;transition:opacity .12s}
 .hov .tip{opacity:1}
 .tip b{display:block;margin-bottom:6px;font:700 1.05rem var(--serif);color:var(--gold-soft)}
@@ -87,7 +88,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
 .donut{display:block;width:100%;height:auto}
 .dTrack{fill:none;stroke:var(--sky);stroke-width:13}
 .seg{fill:none;stroke-width:13;stroke-dasharray:0 100;transition:stroke-dasharray 1.1s cubic-bezier(.2,.7,.2,1),opacity .2s,stroke-width .2s;cursor:pointer}
-.in .seg{stroke-dasharray:var(--d) calc(100 - var(--d))}
+.in .seg{stroke-dasharray:var(--d,0) var(--g,100)}
 .seg-peserta{stroke:var(--blue)}.seg-narasumber{stroke:var(--gold)}.seg-panitia{stroke:#2fbf8a}
 .donut.dim .seg:not(.act){opacity:.25}.seg.act{stroke-width:15}
 .dNum{fill:var(--ink);font:700 15px var(--serif);text-anchor:middle}
@@ -106,7 +107,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
 .fnHead b{font-variant-numeric:tabular-nums}
 .fnTrack{height:14px;margin-top:7px;border-radius:999px;background:var(--sky);overflow:hidden}
 .fnBar{display:block;width:0;height:100%;border-radius:999px;transition:width 1.2s cubic-bezier(.2,.7,.2,1)}
-.in .fnBar{width:var(--w)}
+.in .fnBar{width:var(--w,0%)}
 .fn-sub{background:#8fb0ff}.fn-ver{background:linear-gradient(90deg,var(--blue),#8fb0ff)}.fn-sent{background:linear-gradient(90deg,#a97b1f,var(--gold))}
 
 @media (max-width:640px){
@@ -116,4 +117,4 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
   .topnav a{padding:8px 12px;font-size:.78rem}
   .heroStats{gap:6px}.hs{padding:12px 6px}
 }
-@media (prefers-reduced-motion:reduce){.chartWrap .reveal{clip-path:none}.seg{stroke-dasharray:var(--d) calc(100 - var(--d))}.fnBar{width:var(--w)}}
+@media (prefers-reduced-motion:reduce){.chartWrap .reveal{clip-path:none}.seg{stroke-dasharray:var(--d,0) var(--g,100)}.fnBar{width:var(--w,0%)}}
