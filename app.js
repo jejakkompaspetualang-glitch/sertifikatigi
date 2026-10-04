@@ -219,19 +219,42 @@ function renderSubmissions(items) {
     note.setAttribute('aria-label', 'Catatan admin untuk ' + item.fullName); card.appendChild(note);
     const actions = document.createElement('div'); actions.className = 'actions';
     if (item.status === 'MENUNGGU VALIDASI') {
-      actions.appendChild(actionButton('Setujui & kirim sertifikat', 'primary', function () {
-        if (!confirm('Setujui data ' + item.fullName + ' dan kirim sertifikat ke ' + item.email + '?')) return;
-        runAction('approve', item.id, note.value);
+      actions.appendChild(actionButton('Setujui & kirim sertifikat', 'primary', async function () {
+        const ok = await showDialog({
+          title: 'Setujui dan kirim sertifikat?',
+          message: 'Sertifikat akan dibuat dan dikirim melalui email kepada penerima berikut. Tindakan ini tidak dapat dibatalkan.',
+          details: [['Penerima', item.fullName], ['Email', item.email], ['Kategori', item.category]],
+          confirmText: 'Setujui & kirim', tone: 'primary'
+        });
+        if (ok) runAction('approve', item.id, note.value);
       }));
-      actions.appendChild(actionButton('Tolak data', 'danger', function () {
-        if (!note.value.trim()) { alert('Mohon isi alasan penolakan terlebih dahulu.'); return; }
-        if (!confirm('Tolak data ' + item.fullName + '?')) return;
-        runAction('reject', item.id, note.value);
+      actions.appendChild(actionButton('Tolak data', 'danger', async function () {
+        if (!note.value.trim()) {
+          await showDialog({
+            title: 'Alasan penolakan diperlukan',
+            message: 'Mohon isi kolom catatan admin dengan alasan penolakan agar dapat ditindaklanjuti oleh penerima.',
+            confirmText: 'Mengerti', cancelText: null, tone: 'warning'
+          });
+          note.focus();
+          return;
+        }
+        const ok = await showDialog({
+          title: 'Tolak data ini?',
+          message: 'Data akan ditandai sebagai ditolak dan alasan penolakan dicatat.',
+          details: [['Penerima', item.fullName], ['Email', item.email], ['Alasan', note.value.trim()]],
+          confirmText: 'Tolak data', tone: 'danger'
+        });
+        if (ok) runAction('reject', item.id, note.value);
       }));
     } else if (item.status === 'GAGAL' || item.status === 'DISETUJUI' || item.status === 'SEDANG DIPROSES') {
-      actions.appendChild(actionButton('Coba kirim ulang', 'primary', function () {
-        if (!confirm('Coba kirim ulang sertifikat ke ' + item.email + '?')) return;
-        runAction('retry', item.id, '');
+      actions.appendChild(actionButton('Coba kirim ulang', 'primary', async function () {
+        const ok = await showDialog({
+          title: 'Kirim ulang sertifikat?',
+          message: 'Sistem akan mencoba kembali membuat dan mengirim sertifikat ke penerima berikut.',
+          details: [['Penerima', item.fullName], ['Email', item.email]],
+          confirmText: 'Kirim ulang', tone: 'primary'
+        });
+        if (ok) runAction('retry', item.id, '');
       }));
     }
     if (/^https:\/\//i.test(item.fileUrl || '')) {
@@ -241,6 +264,73 @@ function renderSubmissions(items) {
     }
     card.appendChild(actions);
     list.appendChild(card);
+  });
+}
+
+/**
+ * Kotak dialog kustom (pengganti confirm/alert bawaan browser). Mengembalikan Promise<boolean>.
+ * opts: title, message, details [[label, nilai]], confirmText, cancelText (null = hanya satu tombol), tone (primary|danger|warning).
+ * Semua teks dipasang lewat textContent sehingga aman terhadap isian pengguna.
+ */
+const DIALOG_ICONS = {
+  primary: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  danger: '<path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  warning: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.5"/>'
+};
+
+function showDialog(opts) {
+  return new Promise(function (resolve) {
+    const tone = DIALOG_ICONS[opts.tone] ? opts.tone : 'primary';
+    const previous = document.activeElement;
+    const overlay = el('div', 'dialogOverlay');
+    const box = el('div', 'dialogBox tone-' + tone);
+    box.setAttribute('role', 'alertdialog'); box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-labelledby', 'dialogTitle'); box.setAttribute('aria-describedby', 'dialogMessage');
+
+    const icon = el('span', 'dialogIcon'); icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + DIALOG_ICONS[tone] + '</svg>';
+    const title = el('h3', 'dialogTitle', opts.title || 'Konfirmasi'); title.id = 'dialogTitle';
+    const msg = el('p', 'dialogMessage', opts.message || ''); msg.id = 'dialogMessage';
+    box.append(icon, title, msg);
+
+    if (opts.details && opts.details.length) {
+      const dl = el('dl', 'dialogDetails');
+      opts.details.forEach(function (d) { dl.append(el('dt', null, d[0]), el('dd', null, d[1] || '-')); });
+      box.appendChild(dl);
+    }
+
+    const bar = el('div', 'dialogActions');
+    const done = function (value) {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove(); document.body.classList.remove('dialogOpen');
+      if (previous && previous.focus) previous.focus();
+      resolve(value);
+    };
+    let cancelBtn = null;
+    if (opts.cancelText !== null) {
+      cancelBtn = el('button', 'secondary', opts.cancelText || 'Batal'); cancelBtn.type = 'button';
+      cancelBtn.addEventListener('click', function () { done(false); });
+      bar.appendChild(cancelBtn);
+    }
+    const okBtn = el('button', tone === 'danger' ? 'danger' : 'primary', opts.confirmText || 'Ya, lanjutkan'); okBtn.type = 'button';
+    okBtn.addEventListener('click', function () { done(true); });
+    bar.appendChild(okBtn);
+    box.appendChild(bar);
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(cancelBtn ? false : true); }
+      else if (e.key === 'Tab') { // fokus tetap berada di dalam dialog
+        const f = Array.from(box.querySelectorAll('button'));
+        const i = f.indexOf(document.activeElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
+      }
+    }
+    document.addEventListener('keydown', onKey, true);
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay && cancelBtn) done(false); });
+    overlay.appendChild(box);
+    document.body.appendChild(overlay); document.body.classList.add('dialogOpen');
+    (tone === 'danger' && cancelBtn ? cancelBtn : okBtn).focus();
   });
 }
 
@@ -458,7 +548,12 @@ async function onAssetChosen(asset, input) {
 }
 
 async function removeAsset(asset) {
-  if (!confirm('Hapus ' + asset.label.toLowerCase() + ' dari pengaturan?')) return;
+  const ok = await showDialog({
+    title: 'Hapus ' + asset.label.toLowerCase() + '?',
+    message: 'Gambar akan dihapus dari pengaturan dan tidak lagi tampil pada sertifikat berikutnya.',
+    confirmText: 'Hapus', tone: 'danger'
+  });
+  if (!ok) return;
   try {
     await api('removeAsset', { token: adminToken, kind: asset.key });
     setAssetPreview(asset.key, '');
