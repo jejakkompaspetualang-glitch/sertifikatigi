@@ -290,10 +290,9 @@ const ROLES = [
 ];
 const ASSETS = [
   { key: 'logo', label: 'Logo', hint: 'Ditampilkan pada bagian atas sertifikat.' },
-  { key: 'stamp', label: 'Stempel', hint: 'Diletakkan di samping tanda tangan.' },
-  { key: 'signature', label: 'Tanda tangan', hint: 'Diletakkan di atas nama penandatangan.' }
+  { key: 'signature', label: 'Tanda tangan & stempel', hint: 'Satu gambar berisi tanda tangan beserta stempel; diletakkan di atas nama penandatangan.' }
 ];
-const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'eventKind', 'eventDuration', 'certificateCode', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle'];
+const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'eventKind', 'eventDuration', 'certificateCode', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle', 'signerNta'];
 let settingsLoaded = false;
 let DEFAULT_LINEUP = '';
 let customLineup = false;
@@ -427,7 +426,7 @@ function loadImage(src) {
 /** Kecilkan di browser (PNG, transparansi dipertahankan) agar unggahan ringan dan cepat. */
 async function shrinkImage(file) {
   const img = await loadImage(await readFileAsDataUrl(file));
-  let max = 700;
+  let max = 1000;
   for (let k = 0; k < 4; k++) {
     const scale = Math.min(1, max / Math.max(img.width, img.height));
     const c = document.createElement('canvas');
