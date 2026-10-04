@@ -15,7 +15,8 @@ body{background:radial-gradient(1100px 460px at 50% -140px,#dbe6ff 0,transparent
 @media (min-width:821px){.hero{padding:56px 48px 92px;border-radius:30px}.hero h1{font-size:clamp(2.6rem,5.4vw,4.3rem)}.theme{font-size:1.6rem}.lead{font-size:.95rem}}
 .hero{box-shadow:0 40px 80px -30px #061a52a0}
 .chips li{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.heroStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:660px;margin:28px auto 0}
+.heroStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:660px;min-height:96px;margin:28px auto 0}
+.heroStats:empty{visibility:hidden}
 .hs{padding:16px 10px 14px;border-radius:18px;background:#ffffff14;border:1px solid #ffffff30;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .hs strong{display:block;font:700 clamp(1.7rem,4.4vw,2.6rem)/1 var(--serif);color:#fff;font-variant-numeric:tabular-nums}
 .hs span{display:block;margin-top:6px;font-size:.72rem;font-weight:500;color:var(--gold-soft)}
@@ -115,6 +116,17 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
   .donutBox{grid-template-columns:1fr}.donut{max-width:220px;margin:0 auto}
   .statsPublic{border-radius:22px;padding:32px 14px}
   .topnav a{padding:8px 12px;font-size:.78rem}
-  .heroStats{gap:6px}.hs{padding:12px 6px}
+  .heroStats{gap:6px;min-height:88px}.hs{padding:12px 6px}
 }
 @media (prefers-reduced-motion:reduce){.chartWrap .reveal{clip-path:none}.seg{stroke-dasharray:var(--d,0) var(--g,100)}.fnBar{width:var(--w,0%)}}
+
+/* Layar sentuh: tanpa efek hover (di ponsel hover "menempel" setelah ketukan dan membuat kartu terangkat/bergeser) */
+@media (hover:none){
+  button.kpi.link:hover{transform:none;box-shadow:none}
+  .people>div:hover{border-color:var(--line);box-shadow:var(--shadow)}
+  .dLegend li:hover{background:transparent;border-color:var(--line)}
+  .dLegend li.act{background:var(--sky);border-color:var(--blue)}
+  .topnav a:hover{background:transparent}.topnav a.on:hover{background:var(--navy)}
+  .tab:hover{background:transparent}.tab.active:hover{background:linear-gradient(135deg,#0b2a7a,#061a52)}
+  button:active:not(:disabled){transform:none}
+}
