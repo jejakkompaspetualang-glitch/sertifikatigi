@@ -245,3 +245,27 @@ footer { text-align:center; color:var(--muted); font-size:.78rem; padding:30px 1
   }
 }
 #loginForm .primary { background:linear-gradient(135deg,#2c4c92,#1a3470); box-shadow:0 10px 22px #1a347033; }
+
+/* ===== Kotak dialog (konfirmasi tindakan admin) ===== */
+body.dialogOpen { overflow:hidden; }
+.dialogOverlay { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px;
+  background:rgba(6,26,82,.55); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); animation:dlgFade .16s ease-out both; }
+.dialogBox { position:relative; width:min(440px,100%); max-height:calc(100vh - 40px); overflow:auto; padding:28px 26px 22px; text-align:center;
+  background:var(--white); border-radius:18px; border:1px solid var(--line-strong); border-top:3px solid var(--gold);
+  box-shadow:0 30px 70px rgba(6,26,82,.35); animation:dlgRise .2s ease-out both; }
+.dialogIcon { display:grid; place-items:center; width:52px; height:52px; margin:0 auto 14px; border-radius:50%; background:var(--sky); color:var(--blue-dark); }
+.dialogIcon svg { width:26px; height:26px; }
+.tone-danger .dialogIcon { background:#fdecea; color:#d92d20; }
+.tone-warning .dialogIcon { background:#fff5dc; color:#a86b00; }
+.dialogTitle { margin:0 0 6px; font:700 1.45rem/1.2 var(--serif); color:var(--ink); }
+.dialogMessage { margin:0; font-size:.9rem; line-height:1.6; color:var(--muted); }
+.dialogDetails { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 14px; margin:16px 0 0; padding:12px 14px; text-align:left;
+  background:var(--bg); border:1px solid var(--line); border-radius:12px; font-size:.86rem; }
+.dialogDetails dt { color:var(--muted); font-weight:500; }
+.dialogDetails dd { margin:0; color:var(--ink); font-weight:600; overflow-wrap:anywhere; }
+.dialogActions { display:flex; justify-content:center; gap:10px; margin-top:22px; }
+.dialogActions button { flex:1 1 0; max-width:200px; min-height:44px; padding:10px 16px; }
+@keyframes dlgFade { from { opacity:0; } to { opacity:1; } }
+@keyframes dlgRise { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:none; } }
+@media (max-width:480px) { .dialogActions { flex-direction:column-reverse; } .dialogActions button { max-width:none; } }
+@media (prefers-reduced-motion:reduce) { .dialogOverlay, .dialogBox { animation:none; } }
