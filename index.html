@@ -83,7 +83,7 @@
     <section id="adminView" class="panel hidden">
       <div id="loginPanel">
         <h2>Masuk Admin</h2>
-        <p class="muted">Masukkan kata sandi administrator untuk mengelola data kehadiran dan penerbitan sertifikat.</p>
+        <p class="muted">Masukkan kata sandi admin (Super Admin atau Admin Validasi) untuk mengelola data kehadiran dan penerbitan sertifikat.</p>
         <form id="loginForm">
           <label for="adminPassword">Kata sandi admin</label>
           <input id="adminPassword" type="password" required autocomplete="current-password">
@@ -94,10 +94,10 @@
 
       <div id="dashboard" class="hidden">
         <div class="dashboardHead">
-          <div><h2>Panel Admin</h2><p class="muted">Verifikasi data kehadiran dan kelola informasi kegiatan.</p></div>
+          <div><h2>Panel Admin</h2><p class="muted" id="dashDesc">Verifikasi data kehadiran dan kelola informasi kegiatan.</p></div>
           <button class="secondary small" id="logoutBtn" type="button">Keluar</button>
         </div>
-        <div class="subtabs">
+        <div class="subtabs" id="subtabs">
           <button class="subtab active" id="validationTab" type="button">Validasi Data</button>
           <button class="subtab" id="settingsTab" type="button">Pengaturan Acara</button>
         </div>
