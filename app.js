@@ -180,9 +180,13 @@ async function loadSubmissions() {
   const seq = ++listSeq;
   list.textContent = 'Memuat data...';
   try {
-    const items = await api('list', { token: tokenAtRequest, filter: filter });
+    // 'TERTAHAN' = gabungan DISETUJUI + SEDANG DIPROSES (server hanya mengenal satu status per permintaan).
+    const merged = filter === 'TERTAHAN';
+    let items = await api('list', { token: tokenAtRequest, filter: merged ? 'SEMUA' : filter });
     if (seq !== listSeq || tokenAtRequest !== adminToken) return; // ada permintaan lebih baru / sudah keluar
-    renderSubmissions(Array.isArray(items) ? items : []);
+    items = Array.isArray(items) ? items : [];
+    if (merged) items = items.filter(function (it) { return it.status === 'DISETUJUI' || it.status === 'SEDANG DIPROSES'; });
+    renderSubmissions(items);
   } catch (err) {
     if (seq !== listSeq || tokenAtRequest !== adminToken) return;
     list.textContent = err.message || 'Gagal memuat data.';
@@ -373,7 +377,7 @@ function logoutAdmin(callServer, reason) {
   settingsLoaded = false;
   showAdminPanel('validation');
   $('submissionList').textContent = 'Silakan masuk untuk memuat data.';
-  $('adminStats').textContent = '';
+  $('adminStats').textContent = ''; $('adminStats')._d = null;
   $('adminHistory').textContent = '';
   message('loginMessage', reason || 'Anda telah keluar.', reason ? 'warning' : '');
 }
@@ -447,17 +451,17 @@ function renderLineup(cfg) {
 }
 
 /* ===== Redaksi sertifikat dan email (admin) ===== */
-const WORDING_UI = [
-  { key: 'certTitle', label: 'Judul sertifikat', rows: 1 },
-  { key: 'certIntro', label: 'Kalimat pembuka (sebelum nama penerima)', rows: 1 },
-  { key: 'rolePeserta', label: 'Kalimat untuk Peserta', rows: 1 },
-  { key: 'roleNarasumber', label: 'Kalimat untuk Narasumber', rows: 1 },
-  { key: 'rolePanitia', label: 'Kalimat untuk Panitia', rows: 1 },
-  { key: 'certEventLine', label: 'Kalimat kegiatan', rows: 1 },
-  { key: 'certThemeLine', label: 'Kalimat tema (boleh 2 baris)', rows: 2 },
-  { key: 'certClosing', label: 'Kalimat penutup', rows: 2 },
-  { key: 'emailSubject', label: 'Subjek email', rows: 1 },
-  { key: 'emailBody', label: 'Isi email', rows: 9 }
+const WORDING_UI = [ // max = batas di server (WORDING_FIELDS pada Code.gs)
+  { key: 'certTitle', label: 'Judul sertifikat', rows: 1, max: 40 },
+  { key: 'certIntro', label: 'Kalimat pembuka (sebelum nama penerima)', rows: 1, max: 120 },
+  { key: 'rolePeserta', label: 'Kalimat untuk Peserta', rows: 1, max: 160 },
+  { key: 'roleNarasumber', label: 'Kalimat untuk Narasumber', rows: 1, max: 160 },
+  { key: 'rolePanitia', label: 'Kalimat untuk Panitia', rows: 1, max: 160 },
+  { key: 'certEventLine', label: 'Kalimat kegiatan', rows: 1, max: 200 },
+  { key: 'certThemeLine', label: 'Kalimat tema (boleh 2 baris)', rows: 2, max: 300 },
+  { key: 'certClosing', label: 'Kalimat penutup', rows: 2, max: 300 },
+  { key: 'emailSubject', label: 'Subjek email', rows: 1, max: 160 },
+  { key: 'emailBody', label: 'Isi email', rows: 9, max: 1500 }
 ];
 const PLACEHOLDER_HELP = {
   nama: 'nama penerima', instansi: 'instansi/sekolah', kategori: 'Peserta/Narasumber/Panitia', kegiatan: 'jenis + judul kegiatan',
@@ -486,7 +490,7 @@ function buildWordingEditor() {
   WORDING_UI.forEach(function (f) {
     const lab = el('label', null, f.label); lab.setAttribute('for', 'w_' + f.key);
     const inp = f.rows > 1 ? el('textarea') : el('input');
-    inp.id = 'w_' + f.key; if (f.rows > 1) inp.rows = f.rows; inp.maxLength = f.key === 'emailBody' ? 1500 : 300;
+    inp.id = 'w_' + f.key; if (f.rows > 1) inp.rows = f.rows; inp.maxLength = f.max;
     inp.spellcheck = true;
     box.append(lab, inp);
   });
@@ -784,7 +788,8 @@ async function onSaveSettings(ev) {
 buildPeopleEditor();
 buildAssetEditor();
 buildWordingEditor();
-$('settingsPanel').addEventListener('input', renderWordingPreview);
+let pvFrame = 0;
+$('settingsPanel').addEventListener('input', function () { if (!pvFrame) pvFrame = requestAnimationFrame(function () { pvFrame = 0; renderWordingPreview(); }); });
 $('previewCategory').addEventListener('change', renderWordingPreview);
 $('wordingResetBtn').addEventListener('click', async function () {
   const ok = await showDialog({
@@ -818,9 +823,6 @@ DEFAULT_DESC = $('eventDesc').textContent.trim();
 DEFAULT_PEOPLE = parseDefaultPeople(DEFAULT_LINEUP);
 try { $('adminName').value = localStorage.getItem('igiAdminName') || ''; } catch (e) { /* abaikan */ }
 showView('public');
-loadCachedConfig();
-loadConfig();
-loadPublicStats();
 
 
 /* ===== Rekapitulasi (infografis), histori persetujuan, dan dasbor publik ===== */
@@ -840,7 +842,7 @@ let uid = 0;
 const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 const revealIO = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
   es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); countUp(e.target); } });
-}, { threshold: 0.2 }) : null;
+}, { threshold: 0.01, rootMargin: '0px 0px -12% 0px' }) : null;
 function reveal(node) { if (revealIO) revealIO.observe(node); else { node.classList.add('in'); countUp(node); } }
 function countUp(root) {
   root.querySelectorAll('[data-to]').forEach(function (n) {
@@ -888,6 +890,10 @@ function gotoValidation(status) {
   loadSubmissions();
 }
 
+let hideActive = null; // tooltip sentuh yang sedang terbuka
+document.addEventListener('pointerdown', function (e) {
+  if (hideActive && !(e.target && e.target.classList && e.target.classList.contains('hit'))) { hideActive(); hideActive = null; }
+});
 const SERIES = [
   { key: 'submitted', cls: 'sub', label: 'Mengisi formulir' },
   { key: 'verified', cls: 'ver', label: 'Hadir terverifikasi' },
@@ -912,7 +918,7 @@ function weeklyChartBlock(weekly) {
     const v = top / 4 * i, y = Y(v);
     svg.append(svgEl('line', { x1: L, x2: W - R, y1: y, y2: y, class: 'grid' }), svgEl('text', { x: L - 8, y: y + 4, class: 'axis end' }, String(v)));
   }
-  weekly.forEach(function (w, i) { if (!narrow || i % 2 === n % 2) svg.appendChild(svgEl('text', { x: X(i), y: H - B + 20, class: 'axis mid' }, w.label)); });
+  weekly.forEach(function (w, i) { if (!narrow || (n - 1 - i) % 2 === 0) svg.appendChild(svgEl('text', { x: X(i), y: H - B + 20, class: 'axis mid' }, w.label)); });
   const layer = svgEl('g', { class: 'reveal' }); svg.appendChild(layer);
   SERIES.forEach(function (s) {
     const pts = weekly.map(function (w, i) { return [X(i), Y(w[s.key])]; });
@@ -937,14 +943,14 @@ function weeklyChartBlock(weekly) {
     });
     const pct = x / W * 100;
     tip.style.left = pct + '%'; tip.style.transform = 'translateX(' + (pct > 68 ? '-106%' : pct < 32 ? '6%' : '-50%') + ')';
-    wrap.classList.add('hov');
+    wrap.classList.add('hov'); hideActive = hide;
   }
   function hide() { wrap.classList.remove('hov'); dots.textContent = ''; }
   const cw = n > 1 ? pw / (n - 1) : pw;
   weekly.forEach(function (w, i) {
     const hit = svgEl('rect', { x: X(i) - cw / 2, y: T, width: cw, height: ph, class: 'hit', tabindex: '0', 'aria-label': 'Pekan ' + w.label + ': ' + w.submitted + ' mengisi formulir, ' + w.verified + ' terverifikasi, ' + w.sent + ' sertifikat terkirim' });
     ['pointerenter', 'pointermove', 'pointerdown', 'focus'].forEach(function (ev) { hit.addEventListener(ev, function () { show(i); }); });
-    hit.addEventListener('pointerleave', hide); hit.addEventListener('blur', hide);
+    hit.addEventListener('pointerleave', function (e) { if (e.pointerType !== 'touch') hide(); }); hit.addEventListener('blur', hide);
     svg.appendChild(hit);
   });
   const legend = el('div', 'legend');
@@ -983,7 +989,7 @@ function categoryCard(byCategory) {
   CATEGORIES.forEach(function (c) {
     const d = byCategory[c] || { submitted: 0, verified: 0, sent: 0 }, pct = total ? d.verified / total * 100 : 0, k = c.toLowerCase();
     const seg = svgEl('circle', { cx: 50, cy: 50, r: 38, class: 'seg seg-' + k, pathLength: 100, 'stroke-dashoffset': -acc, transform: 'rotate(-90 50 50)' });
-    seg.style.setProperty('--d', Math.max(0, pct - 0.8).toFixed(2)); acc += pct;
+    const dash = Math.max(0, pct - 0.8); seg.style.setProperty('--d', dash.toFixed(2)); seg.style.setProperty('--g', (100 - dash).toFixed(2)); acc += pct;
     const li = el('li'); li.tabIndex = 0;
     const head = el('b'); head.append(el('span', null, c), el('span', null, fmtNum(d.verified) + ' (' + Math.round(pct) + '%)'));
     li.append(el('i', 'sw sw-' + k), head, el('small', null, 'Mengisi ' + fmtNum(d.submitted) + ', terkirim ' + fmtNum(d.sent)));
@@ -1059,8 +1065,10 @@ function updateHeroStats(t, d) {
   box.classList.remove('hidden'); reveal(box);
 }
 
+function statNoteText(d) { return 'Hadir terverifikasi = data yang sudah disetujui admin. Diperbarui ' + fmtDate(d.generatedAt) + '.'; }
+
 function renderStats(box, d, isAdmin) {
-  box.innerHTML = '';
+  box.innerHTML = ''; box._d = d; box._admin = !!isAdmin;
   const t = d.totals || {}, wk = d.weekly || [];
   const sp = function (k) { return wk.map(function (w) { return w[k] || 0; }); };
   const grid = el('div', 'kpiGrid');
@@ -1075,7 +1083,7 @@ function renderStats(box, d, isAdmin) {
     const todo = el('div', 'kpiGrid todo');
     todo.append(
       kpiCard('Menunggu validasi', t.pending, 'k-amber warn', 'Klik untuk memvalidasi', function () { gotoValidation('MENUNGGU VALIDASI'); }),
-      kpiCard('Diproses / tertahan', t.processing, 'k-amber warn', '', function () { gotoValidation('DISETUJUI'); }),
+      kpiCard('Diproses / tertahan', t.processing, 'k-amber warn', '', function () { gotoValidation('TERTAHAN'); }),
       kpiCard('Gagal kirim', t.failed, 'k-red warn', '', function () { gotoValidation('GAGAL'); }),
       kpiCard('Ditolak', t.rejected, 'k-red warn', '', function () { gotoValidation('DITOLAK'); })
     );
@@ -1090,24 +1098,34 @@ function renderStats(box, d, isAdmin) {
   cols.append(funnelCard(t), categoryCard(d.byCategory || {}));
   box.appendChild(cols); reveal(cols);
   box.appendChild(leaderCard(d, isAdmin));
-  box.appendChild(el('p', 'muted small2', 'Hadir terverifikasi = data yang sudah disetujui admin. Diperbarui ' + fmtDate(d.generatedAt) + '.'));
+  box.appendChild(el('p', 'muted small2 statNote', statNoteText(d)));
   if (!isAdmin) updateHeroStats(t, d);
 }
+
+const STATS_KEY = 'ngabasoStats';
+function statsSig(d) { const c = Object.assign({}, d); delete c.generatedAt; return JSON.stringify(c); }
 
 async function loadPublicStats() {
   if (!apiConfigured()) { $('publicStats').classList.add('hidden'); return; }
   const box = $('publicStatsBody');
-  skeleton(box);
+  let shown = '';
+  try { // tampilkan data tersimpan lebih dulu (instan), lalu segarkan dari server
+    const c = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+    if (c && typeof c === 'object' && c.totals && Array.isArray(c.weekly)) { renderStats(box, c, false); shown = statsSig(c); }
+  } catch (e) { /* abaikan */ }
+  if (!shown) skeleton(box);
   const controller = new AbortController();
   const timer = setTimeout(function () { controller.abort(); }, 25000);
   try {
     const res = await fetch(API_URL + '?action=stats', { signal: controller.signal });
     const json = parseBackend(await res.text());
     if (!json || json.ok !== true) throw new Error('stats');
-    renderStats(box, json.data || {}, false);
+    const data = json.data || {};
+    if (statsSig(data) !== shown) renderStats(box, data, false);
+    else { const n = box.querySelector('.statNote'); if (n) n.textContent = statNoteText(data); }
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(data)); } catch (e) { /* kuota/izin */ }
   } catch (err) {
-    box.innerHTML = '';
-    box.appendChild(el('p', 'muted', 'Statistik belum dapat dimuat saat ini.'));
+    if (!shown) { box.innerHTML = ''; box.appendChild(el('p', 'muted', 'Statistik belum dapat dimuat saat ini.')); }
     console.warn('[stats] ' + (err && err.message));
   } finally {
     clearTimeout(timer);
@@ -1188,3 +1206,20 @@ async function loadHistory() {
     if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
+
+/* Grafik memakai lebar kanvas berbeda untuk ponsel; render ulang hanya saat melewati batas 640px. */
+let wasNarrow = window.innerWidth < 640, resizeTimer = 0;
+window.addEventListener('resize', function () {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function () {
+    const nw = window.innerWidth < 640;
+    if (nw === wasNarrow) return;
+    wasNarrow = nw;
+    [$('publicStatsBody'), $('adminStats')].forEach(function (b) { if (b && b._d && b.childElementCount) renderStats(b, b._d, b._admin); });
+  }, 200);
+});
+
+/* Inisialisasi dijalankan paling akhir agar semua konstanta (SERIES, CATEGORIES, revealIO, ...) sudah terdefinisi. */
+loadCachedConfig();
+loadConfig();
+loadPublicStats();
