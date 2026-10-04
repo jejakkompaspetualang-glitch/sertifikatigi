@@ -457,7 +457,21 @@ const PLACEHOLDER_HELP = {
   jenis_kegiatan: 'jenis kegiatan', nama_kegiatan: 'judul kegiatan', tema: 'tema', tanggal: 'tanggal pelaksanaan',
   durasi: 'durasi (JP)', organisasi: 'nama organisasi', nomor: 'nomor sertifikat', pengirim: 'nama pengirim email'
 };
-let WORDING_DEFAULTS = {};
+// Cadangan di browser: dipakai bila server (Code.gs) belum diperbarui, agar kolom redaksi tetap terisi dan terlihat.
+const FALLBACK_WORDING = {
+  certTitle: 'SERTIFIKAT',
+  certIntro: 'Diberikan kepada:',
+  rolePeserta: 'Atas partisipasi aktifnya sebagai Peserta',
+  roleNarasumber: 'Atas kontribusi dan dedikasinya sebagai Narasumber',
+  rolePanitia: 'Atas dedikasi dan kerja samanya sebagai Panitia',
+  certEventLine: 'dalam kegiatan {kegiatan}',
+  certThemeLine: 'dengan tema:\n\u201C{tema}\u201D',
+  certClosing: 'diselenggarakan oleh {organisasi}[ setara dengan {durasi} Jam Pelajaran (JP)].',
+  emailSubject: 'Sertifikat {kategori} \u2013 {nama_kegiatan}',
+  emailBody: 'Yth. Bapak/Ibu {nama},\n\nAssalamu\u2019alaikum warahmatullahi wabarakatuh.\n\nTerima kasih atas partisipasi dan kontribusi Bapak/Ibu sebagai {kategori} dalam kegiatan "{nama_kegiatan}". Sebagai bentuk penghargaan, bersama email ini kami lampirkan sertifikat digital dalam format PDF.\n\nNomor sertifikat: {nomor}\n\nSemoga ilmu dan pengalaman yang diperoleh bermanfaat bagi peningkatan kualitas pembelajaran. Kami berharap dapat kembali bersilaturahmi pada kegiatan berikutnya.\n\nHormat kami,\n{pengirim}'
+};
+let WORDING_DEFAULTS = FALLBACK_WORDING;
+let wordingSupported = true;
 
 function buildWordingEditor() {
   const box = $('wordingEditor');
@@ -711,10 +725,11 @@ async function loadSettings() {
       updateCount(r);
     });
     ASSETS.forEach(function (a) { setAssetPreview(a.key, (res.assets && res.assets[a.key]) || ''); });
-    WORDING_DEFAULTS = res.wordingDefaults || WORDING_DEFAULTS;
+    wordingSupported = !!(res.wording && res.wordingDefaults);
+    WORDING_DEFAULTS = res.wordingDefaults || FALLBACK_WORDING;
     fillWording(res.wording || WORDING_DEFAULTS);
     settingsLoaded = true;
-    message('adminMessage', '', '');
+    message('adminMessage', wordingSupported ? '' : 'Server (Code.gs) belum diperbarui. Redaksi dan latar sertifikat baru dapat disimpan setelah Code.gs versi terbaru di-deploy sebagai versi baru.', wordingSupported ? '' : 'warning');
   } catch (err) {
     message('adminMessage', err.message || 'Gagal memuat pengaturan.', 'error');
     if (isSessionError(err)) logoutAdmin(false, err.message);
@@ -727,11 +742,11 @@ async function onSaveSettings(ev) {
   SETTING_FIELDS.forEach(function (k) { settings[k] = $('s_' + k).value.trim(); });
   if (!settings.eventName) { message('adminMessage', 'Judul kegiatan wajib diisi.', 'error'); return; }
   ROLES.forEach(function (r) { settings[r.key] = readPeople(r); });
-  settings.wording = readWording();
+  if (wordingSupported) settings.wording = readWording();
   setBusy('saveSettingsBtn', true, 'Menyimpan...');
   try {
     const res = await api('saveSettings', { token: adminToken, settings: settings });
-    message('adminMessage', res.message, 'success');
+    message('adminMessage', wordingSupported ? res.message : 'Pengaturan lain disimpan, tetapi redaksi belum tersimpan karena Code.gs belum diperbarui dan di-deploy.', wordingSupported ? 'success' : 'warning');
     loadConfig();
   } catch (err) {
     message('adminMessage', err.message || 'Gagal menyimpan.', 'error');
