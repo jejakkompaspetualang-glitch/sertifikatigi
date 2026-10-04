@@ -380,7 +380,8 @@ const ROLES = [
 ];
 const ASSETS = [
   { key: 'logo', label: 'Logo', hint: 'Ditampilkan pada bagian atas sertifikat.' },
-  { key: 'signature', label: 'Tanda tangan & stempel', hint: 'Satu gambar berisi tanda tangan beserta stempel; diletakkan di atas nama penandatangan.' }
+  { key: 'signature', label: 'Tanda tangan & stempel', hint: 'Satu gambar berisi tanda tangan beserta stempel; diletakkan di atas nama penandatangan.' },
+  { key: 'background', label: 'Latar sertifikat', wide: true, hint: 'Gambar JPG/PNG ukuran A4 landscape (disarankan 1684 x 1190 px). Gambar dipotong otomatis ke rasio A4 dan dikompres. Hapus untuk memakai latar bawaan. Logo ada di bagian atas tengah, ornamen sebaiknya di sudut agar teks tetap terbaca.' }
 ];
 const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'eventKind', 'eventDuration', 'certificateCode', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle', 'signerNta'];
 let settingsLoaded = false;
@@ -438,6 +439,99 @@ function renderLineup(cfg) {
   });
 }
 
+/* ===== Redaksi sertifikat dan email (admin) ===== */
+const WORDING_UI = [
+  { key: 'certTitle', label: 'Judul sertifikat', rows: 1 },
+  { key: 'certIntro', label: 'Kalimat pembuka (sebelum nama penerima)', rows: 1 },
+  { key: 'rolePeserta', label: 'Kalimat untuk Peserta', rows: 1 },
+  { key: 'roleNarasumber', label: 'Kalimat untuk Narasumber', rows: 1 },
+  { key: 'rolePanitia', label: 'Kalimat untuk Panitia', rows: 1 },
+  { key: 'certEventLine', label: 'Kalimat kegiatan', rows: 1 },
+  { key: 'certThemeLine', label: 'Kalimat tema (boleh 2 baris)', rows: 2 },
+  { key: 'certClosing', label: 'Kalimat penutup', rows: 2 },
+  { key: 'emailSubject', label: 'Subjek email', rows: 1 },
+  { key: 'emailBody', label: 'Isi email', rows: 9 }
+];
+const PLACEHOLDER_HELP = {
+  nama: 'nama penerima', instansi: 'instansi/sekolah', kategori: 'Peserta/Narasumber/Panitia', kegiatan: 'jenis + judul kegiatan',
+  jenis_kegiatan: 'jenis kegiatan', nama_kegiatan: 'judul kegiatan', tema: 'tema', tanggal: 'tanggal pelaksanaan',
+  durasi: 'durasi (JP)', organisasi: 'nama organisasi', nomor: 'nomor sertifikat', pengirim: 'nama pengirim email'
+};
+let WORDING_DEFAULTS = {};
+
+function buildWordingEditor() {
+  const box = $('wordingEditor');
+  box.textContent = '';
+  WORDING_UI.forEach(function (f) {
+    const lab = el('label', null, f.label); lab.setAttribute('for', 'w_' + f.key);
+    const inp = f.rows > 1 ? el('textarea') : el('input');
+    inp.id = 'w_' + f.key; if (f.rows > 1) inp.rows = f.rows; inp.maxLength = f.key === 'emailBody' ? 1500 : 300;
+    inp.spellcheck = true;
+    box.append(lab, inp);
+  });
+  const help = $('placeholderHelp');
+  help.textContent = 'Kode tersedia: ';
+  Object.keys(PLACEHOLDER_HELP).forEach(function (k, i) {
+    if (i) help.appendChild(document.createTextNode(' '));
+    const c = el('code', null, '{' + k + '}'); c.title = PLACEHOLDER_HELP[k]; help.appendChild(c);
+  });
+}
+
+function fillWording(values) {
+  WORDING_UI.forEach(function (f) { $('w_' + f.key).value = (values && values[f.key]) || ''; });
+  renderWordingPreview();
+}
+
+function readWording() {
+  const out = {};
+  WORDING_UI.forEach(function (f) { out[f.key] = $('w_' + f.key).value; });
+  return out;
+}
+
+/** Sama dengan renderTemplate_ di Code.gs, dipakai untuk pratinjau. */
+function renderTemplate(tpl, vars) {
+  const ph = /\{([a-z_]+)\}/g;
+  const keysOf = function (str) { const ks = []; String(str).replace(ph, function (m, k) { ks.push(k); return m; }); return ks; };
+  const out = [];
+  String(tpl || '').split('\n').forEach(function (line) {
+    const keys = keysOf(line);
+    if (keys.length && keys.every(function (k) { return !vars[k]; })) return;
+    const opt = line.replace(/\[([^\[\]]*)\]/g, function (m, inner) { return keysOf(inner).some(function (k) { return !vars[k]; }) ? '' : inner; });
+    out.push(opt.replace(ph, function (m, k) { return vars[k] == null ? '' : String(vars[k]); }).replace(/ {2,}/g, ' ').replace(/ +([,.;:])/g, '$1').trim());
+  });
+  return out.join('\n');
+}
+
+function renderWordingPreview() {
+  const val = function (id) { return ($(id) && $(id).value || '').trim(); };
+  const kind = val('s_eventKind'), name = val('s_eventName');
+  const cat = $('previewCategory').value;
+  const W = {};
+  WORDING_UI.forEach(function (f) { W[f.key] = val('w_' + f.key) || WORDING_DEFAULTS[f.key] || ''; });
+  const V = {
+    nama: 'Nama Penerima Contoh', instansi: 'Instansi Contoh', kategori: cat,
+    kegiatan: (kind ? kind + ' ' : '') + name, jenis_kegiatan: kind, nama_kegiatan: name,
+    tema: val('s_eventTheme'), tanggal: val('s_eventDate'), durasi: val('s_eventDuration').replace(/\s*JP\s*$/i, ''),
+    organisasi: val('s_orgName'), nomor: '001/' + (val('s_certificateCode') || 'KODE') + '/X/2026', pengirim: 'Panitia Kegiatan'
+  };
+  const role = cat === 'Narasumber' ? W.roleNarasumber : cat === 'Panitia' ? W.rolePanitia : W.rolePeserta;
+  const box = $('wordingPreview');
+  box.textContent = '';
+  const add = function (cls, text) { if (text) box.appendChild(el('p', cls, text)); };
+  add('pvTitle', W.certTitle.toUpperCase());
+  add('pvSmall', 'Nomor: ' + V.nomor);
+  add('pvSmall', renderTemplate(W.certIntro, V));
+  add('pvName', V.nama);
+  add('pvSmall', V.instansi);
+  add('pvRole', renderTemplate(role, V));
+  add('pvEvent', renderTemplate(W.certEventLine, V));
+  add('pvSmall pvPre', renderTemplate(W.certThemeLine, V));
+  add('pvSmall', renderTemplate(W.certClosing, V));
+  box.appendChild(el('hr'));
+  add('pvMail', 'Subjek: ' + renderTemplate(W.emailSubject, V));
+  add('pvMail pvPre', renderTemplate(W.emailBody, V));
+}
+
 function showAdminPanel(which) {
   const isSettings = which === 'settings';
   $('validationPanel').classList.toggle('hidden', isSettings);
@@ -492,7 +586,7 @@ function buildAssetEditor() {
   const box = $('assetEditor');
   box.textContent = '';
   ASSETS.forEach(function (a) {
-    const card = el('div', 'assetCard');
+    const card = el('div', 'assetCard' + (a.wide ? ' wide' : ''));
     card.append(el('strong', null, a.label), el('p', 'muted', a.hint));
     const img = el('img', 'assetPreview hidden'); img.id = 'asset-img-' + a.key; img.alt = 'Pratinjau ' + a.label;
     const empty = el('div', 'assetEmpty', 'Belum ada gambar'); empty.id = 'asset-empty-' + a.key;
@@ -548,13 +642,35 @@ async function shrinkImage(file) {
   throw new Error('Ukuran gambar terlalu besar. Silakan gunakan gambar dengan resolusi lebih rendah.');
 }
 
+/** Latar sertifikat: dipotong ke rasio A4 landscape (cover), diekspor JPEG dan dikompres hingga di bawah ~950 KB. */
+async function shrinkBackground(file) {
+  const img = await loadImage(await readFileAsDataUrl(file));
+  const RATIO = 842 / 595;
+  let sw = img.width, sh = img.height, sx = 0, sy = 0;
+  if (sw / sh > RATIO) { sw = sh * RATIO; sx = (img.width - sw) / 2; } else { sh = sw / RATIO; sy = (img.height - sh) / 2; }
+  let outW = Math.min(1684, Math.round(sw));
+  for (let k = 0; k < 4; k++) {
+    const c = document.createElement('canvas');
+    c.width = outW; c.height = Math.round(outW / RATIO);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    for (let q = 0.9; q >= 0.5; q -= 0.1) {
+      const out = c.toDataURL('image/jpeg', q);
+      if (out.length < 1290000) return out;
+    }
+    outW = Math.round(outW * 0.8);
+  }
+  throw new Error('Ukuran gambar latar terlalu besar. Silakan gunakan gambar dengan resolusi lebih rendah.');
+}
+
 async function onAssetChosen(asset, input) {
   const file = input.files && input.files[0];
   if (!file) return;
   message('adminMessage', 'Mengunggah ' + asset.label.toLowerCase() + '...', '');
   try {
     if (!/^image\/(png|jpeg)$/.test(file.type)) throw new Error('Gunakan gambar PNG atau JPG.');
-    const res = await api('uploadAsset', { token: adminToken, kind: asset.key, dataUrl: await shrinkImage(file) });
+    const res = await api('uploadAsset', { token: adminToken, kind: asset.key, dataUrl: asset.key === 'background' ? await shrinkBackground(file) : await shrinkImage(file) });
     setAssetPreview(asset.key, res.preview);
     message('adminMessage', asset.label + ' berhasil disimpan.', 'success');
   } catch (err) {
@@ -595,6 +711,8 @@ async function loadSettings() {
       updateCount(r);
     });
     ASSETS.forEach(function (a) { setAssetPreview(a.key, (res.assets && res.assets[a.key]) || ''); });
+    WORDING_DEFAULTS = res.wordingDefaults || WORDING_DEFAULTS;
+    fillWording(res.wording || WORDING_DEFAULTS);
     settingsLoaded = true;
     message('adminMessage', '', '');
   } catch (err) {
@@ -609,6 +727,7 @@ async function onSaveSettings(ev) {
   SETTING_FIELDS.forEach(function (k) { settings[k] = $('s_' + k).value.trim(); });
   if (!settings.eventName) { message('adminMessage', 'Judul kegiatan wajib diisi.', 'error'); return; }
   ROLES.forEach(function (r) { settings[r.key] = readPeople(r); });
+  settings.wording = readWording();
   setBusy('saveSettingsBtn', true, 'Menyimpan...');
   try {
     const res = await api('saveSettings', { token: adminToken, settings: settings });
@@ -624,6 +743,17 @@ async function onSaveSettings(ev) {
 
 buildPeopleEditor();
 buildAssetEditor();
+buildWordingEditor();
+$('settingsPanel').addEventListener('input', renderWordingPreview);
+$('previewCategory').addEventListener('change', renderWordingPreview);
+$('wordingResetBtn').addEventListener('click', async function () {
+  const ok = await showDialog({
+    title: 'Kembalikan redaksi ke bawaan?',
+    message: 'Seluruh kalimat sertifikat dan email akan diisi ulang dengan redaksi bawaan. Perubahan baru berlaku setelah Anda menekan "Simpan pengaturan".',
+    confirmText: 'Kembalikan', tone: 'warning'
+  });
+  if (ok) fillWording(WORDING_DEFAULTS);
+});
 
 $('validationTab').addEventListener('click', function () { showAdminPanel('validation'); });
 $('settingsTab').addEventListener('click', function () { showAdminPanel('settings'); });
