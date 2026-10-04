@@ -205,7 +205,7 @@ function renderSubmissions(items) {
     const card = document.createElement('article'); card.className = 'submissionCard';
     const title = document.createElement('div'); title.className = 'cardTitle';
     const name = document.createElement('h3'); name.textContent = item.fullName;
-    const badge = document.createElement('span'); badge.className = 'status'; badge.textContent = item.status;
+    const badge = document.createElement('span'); badge.className = 'status'; badge.textContent = item.status; badge.dataset.s = item.status;
     title.append(name, badge); card.appendChild(title);
     const details = document.createElement('div'); details.className = 'details';
     [
@@ -835,11 +835,41 @@ function svgEl(tag, attrs, text) {
 }
 function fmtNum(n) { return Number(n || 0).toLocaleString('id-ID'); }
 
-function kpiCard(label, value, cls, note, onClick) {
+/* ===== Infografis interaktif ===== */
+let uid = 0;
+const REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const revealIO = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) {
+  es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); countUp(e.target); } });
+}, { threshold: 0.2 }) : null;
+function reveal(node) { if (revealIO) revealIO.observe(node); else { node.classList.add('in'); countUp(node); } }
+function countUp(root) {
+  root.querySelectorAll('[data-to]').forEach(function (n) {
+    const to = Number(n.dataset.to) || 0;
+    if (REDUCE || !to) { n.textContent = fmtNum(to); return; }
+    const t0 = performance.now();
+    (function tick(t) { const p = Math.min(1, (t - t0) / 1100); n.textContent = fmtNum(Math.round(to * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(tick); })(t0);
+  });
+}
+/** Kurva halus tanpa overshoot (S-curve horizontal antar titik). */
+function smooth(p) {
+  let d = 'M' + p[0][0].toFixed(1) + ' ' + p[0][1].toFixed(1);
+  for (let i = 1; i < p.length; i++) { const mx = ((p[i - 1][0] + p[i][0]) / 2).toFixed(1); d += ' C' + mx + ' ' + p[i - 1][1].toFixed(1) + ' ' + mx + ' ' + p[i][1].toFixed(1) + ' ' + p[i][0].toFixed(1) + ' ' + p[i][1].toFixed(1); }
+  return d;
+}
+function sparkline(vals) {
+  const W = 84, H = 30, max = Math.max.apply(null, vals.concat(1));
+  const pts = vals.map(function (v, i) { return [i / (vals.length - 1) * W, H - 3 - (H - 6) * v / max]; });
+  const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'spark', 'aria-hidden': 'true' });
+  svg.appendChild(svgEl('path', { d: smooth(pts), class: 'sparkLn' }));
+  return svg;
+}
+function kpiCard(label, value, cls, note, onClick, spark) {
   const c = el(onClick ? 'button' : 'div', 'kpi ' + (cls || '') + (onClick ? ' link' : ''));
   if (onClick) { c.type = 'button'; c.addEventListener('click', onClick); }
-  c.append(el('strong', null, fmtNum(value)), el('span', null, label));
+  const s = el('strong', null, fmtNum(value)); s.dataset.to = value || 0;
+  c.append(s, el('span', null, label));
   if (note) c.appendChild(el('small', null, note));
+  if (spark && spark.length > 1) c.appendChild(sparkline(spark));
   return c;
 }
 
@@ -858,61 +888,125 @@ function gotoValidation(status) {
   loadSubmissions();
 }
 
-function weeklyChart(weekly) {
-  const W = 720, H = 270, L = 38, R = 10, T = 18, B = 40;
-  const plotW = W - L - R, plotH = H - T - B;
-  let max = 4;
-  weekly.forEach(function (w) { max = Math.max(max, w.submitted, w.verified, w.sent); });
+const SERIES = [
+  { key: 'submitted', cls: 'sub', label: 'Mengisi formulir' },
+  { key: 'verified', cls: 'ver', label: 'Hadir terverifikasi' },
+  { key: 'sent', cls: 'sent', label: 'Sertifikat terkirim' }
+];
+
+/** Grafik garis per pekan: kursor + tooltip, legenda yang dapat dinyalakan/dimatikan. */
+function weeklyChartBlock(weekly) {
+  const wrap = el('div', 'chartWrap'), n = weekly.length;
+  if (!n) { wrap.appendChild(el('p', 'muted', 'Belum ada data pekan.')); return wrap; }
+  const narrow = window.innerWidth < 640, W = narrow ? 420 : 720, H = 280, L = 34, R = 16, T = 16, B = 34;
+  const pw = W - L - R, ph = H - T - B, gid = 'wg' + (++uid), on = { submitted: true, verified: true, sent: true }, els = {};
+  let max = 4; weekly.forEach(function (w) { SERIES.forEach(function (s) { max = Math.max(max, w[s.key] || 0); }); });
   const top = Math.ceil(max / 4) * 4;
-  const root = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Grafik kehadiran per pekan' });
+  const X = function (i) { return n > 1 ? L + pw * i / (n - 1) : L + pw / 2; };
+  const Y = function (v) { return T + ph - ph * (v || 0) / top; };
+  const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Grafik kehadiran per pekan' });
+  const lg = svgEl('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+  lg.append(svgEl('stop', { offset: '0', class: 'gs' }), svgEl('stop', { offset: '1', class: 'ge' }));
+  svg.appendChild(svgEl('defs')); svg.firstChild.appendChild(lg);
   for (let i = 0; i <= 4; i++) {
-    const v = top / 4 * i, y = T + plotH - plotH * (v / top);
-    root.appendChild(svgEl('line', { x1: L, x2: W - R, y1: y, y2: y, class: 'grid' }));
-    root.appendChild(svgEl('text', { x: L - 6, y: y + 3, class: 'axis end' }, String(v)));
+    const v = top / 4 * i, y = Y(v);
+    svg.append(svgEl('line', { x1: L, x2: W - R, y1: y, y2: y, class: 'grid' }), svgEl('text', { x: L - 8, y: y + 4, class: 'axis end' }, String(v)));
   }
-  const series = [['submitted', 'bar-sub', 'Mengisi formulir'], ['verified', 'bar-ver', 'Hadir terverifikasi'], ['sent', 'bar-sent', 'Sertifikat terkirim']];
-  const gw = plotW / weekly.length, bw = Math.min(14, (gw - 8) / 3);
-  weekly.forEach(function (w, i) {
-    const gx = L + gw * i + (gw - bw * 3) / 2;
-    series.forEach(function (s, j) {
-      const v = w[s[0]], h = plotH * (v / top);
-      const bar = svgEl('rect', { x: gx + bw * j, y: T + plotH - h, width: Math.max(1, bw - 1), height: v ? Math.max(h, 1.5) : 0, rx: 2, class: s[1] });
-      bar.appendChild(svgEl('title', {}, 'Pekan ' + w.label + ' - ' + s[2] + ': ' + v));
-      root.appendChild(bar);
-      if (s[0] === 'verified' && v > 0) root.appendChild(svgEl('text', { x: gx + bw * j + bw / 2, y: T + plotH - h - 4, class: 'val' }, String(v)));
+  weekly.forEach(function (w, i) { if (!narrow || i % 2 === n % 2) svg.appendChild(svgEl('text', { x: X(i), y: H - B + 20, class: 'axis mid' }, w.label)); });
+  const layer = svgEl('g', { class: 'reveal' }); svg.appendChild(layer);
+  SERIES.forEach(function (s) {
+    const pts = weekly.map(function (w, i) { return [X(i), Y(w[s.key])]; });
+    const g = svgEl('g', { class: 'ser' });
+    if (s.key === 'verified') g.appendChild(svgEl('path', { d: smooth(pts) + ' L' + X(n - 1) + ' ' + Y(0) + ' L' + X(0) + ' ' + Y(0) + ' Z', fill: 'url(#' + gid + ')' }));
+    g.appendChild(svgEl('path', { d: smooth(pts), class: 'ln ln-' + s.cls }));
+    layer.appendChild(g); els[s.key] = g;
+  });
+  const cur = svgEl('line', { x1: 0, x2: 0, y1: T, y2: T + ph, class: 'cursor' }), dots = svgEl('g');
+  svg.append(cur, dots);
+  const tip = el('div', 'tip'), plot = el('div', 'plot');
+  function show(i) {
+    const w = weekly[i], x = X(i);
+    cur.setAttribute('x1', x); cur.setAttribute('x2', x);
+    dots.textContent = ''; tip.textContent = '';
+    tip.appendChild(el('b', null, 'Pekan ' + w.label));
+    SERIES.forEach(function (s) {
+      if (!on[s.key]) return;
+      dots.appendChild(svgEl('circle', { cx: x, cy: Y(w[s.key]), r: 4.5, class: 'dot dot-' + s.cls }));
+      const r = el('p'); r.append(el('i', 'sw sw-' + s.cls), el('span', null, s.label), el('strong', null, fmtNum(w[s.key])));
+      tip.appendChild(r);
     });
-    root.appendChild(svgEl('text', { x: L + gw * i + gw / 2, y: H - B + 16, class: 'axis mid' }, w.label));
+    const pct = x / W * 100;
+    tip.style.left = pct + '%'; tip.style.transform = 'translateX(' + (pct > 68 ? '-106%' : pct < 32 ? '6%' : '-50%') + ')';
+    wrap.classList.add('hov');
+  }
+  function hide() { wrap.classList.remove('hov'); dots.textContent = ''; }
+  const cw = n > 1 ? pw / (n - 1) : pw;
+  weekly.forEach(function (w, i) {
+    const hit = svgEl('rect', { x: X(i) - cw / 2, y: T, width: cw, height: ph, class: 'hit', tabindex: '0', 'aria-label': 'Pekan ' + w.label + ': ' + w.submitted + ' mengisi formulir, ' + w.verified + ' terverifikasi, ' + w.sent + ' sertifikat terkirim' });
+    ['pointerenter', 'pointermove', 'pointerdown', 'focus'].forEach(function (ev) { hit.addEventListener(ev, function () { show(i); }); });
+    hit.addEventListener('pointerleave', hide); hit.addEventListener('blur', hide);
+    svg.appendChild(hit);
   });
-  return root;
+  const legend = el('div', 'legend');
+  SERIES.forEach(function (s) {
+    const b = el('button', 'lgBtn'); b.type = 'button'; b.setAttribute('aria-pressed', 'true');
+    b.append(el('i', 'sw sw-' + s.cls), document.createTextNode(s.label));
+    b.addEventListener('click', function () {
+      on[s.key] = !on[s.key]; els[s.key].classList.toggle('off', !on[s.key]);
+      b.classList.toggle('off', !on[s.key]); b.setAttribute('aria-pressed', String(on[s.key])); hide();
+    });
+    legend.appendChild(b);
+  });
+  plot.append(svg, tip); wrap.append(legend, plot); reveal(wrap);
+  return wrap;
 }
 
-function chartLegend() {
-  const box = el('div', 'legend');
-  [['bar-sub', 'Mengisi formulir'], ['bar-ver', 'Hadir terverifikasi'], ['bar-sent', 'Sertifikat terkirim']].forEach(function (x) {
-    const item = el('span', 'lg');
-    const dot = svgEl('svg', { viewBox: '0 0 10 10', width: '10', height: '10', 'aria-hidden': 'true' });
-    dot.appendChild(svgEl('rect', { width: 10, height: 10, rx: 2, class: x[0] }));
-    item.append(dot, document.createTextNode(' ' + x[1]));
-    box.appendChild(item);
-  });
-  return box;
-}
-
+/** Donat komposisi kehadiran; sorot kategori lewat kursor, sentuhan, atau fokus. */
 function categoryCard(byCategory) {
   const card = el('div', 'statCard');
-  card.appendChild(el('h3', null, 'Hadir per kategori'));
+  card.appendChild(el('h3', null, 'Komposisi kehadiran'));
+  card.appendChild(el('p', 'muted small2', 'Arahkan kursor atau sentuh untuk melihat rincian tiap kategori.'));
   let total = 0;
   CATEGORIES.forEach(function (c) { total += (byCategory[c] || {}).verified || 0; });
+  const box = el('div', 'donutBox'), list = el('ul', 'dLegend');
+  const svg = svgEl('svg', { viewBox: '0 0 100 100', class: 'donut', role: 'img', 'aria-label': 'Komposisi hadir per kategori' });
+  svg.appendChild(svgEl('circle', { cx: 50, cy: 50, r: 38, class: 'dTrack' }));
+  const num = svgEl('text', { x: 50, y: 52, class: 'dNum' }, fmtNum(total)), lab = svgEl('text', { x: 50, y: 62, class: 'dLab' }, 'hadir terverifikasi');
+  const parts = {};
+  function focusCat(c) {
+    svg.classList.toggle('dim', !!c);
+    CATEGORIES.forEach(function (k) { parts[k].seg.classList.toggle('act', k === c); parts[k].li.classList.toggle('act', k === c); });
+    const v = c ? (byCategory[c] || {}).verified || 0 : total;
+    num.textContent = fmtNum(v); lab.textContent = c ? c + ' (' + (total ? Math.round(v / total * 100) : 0) + '%)' : 'hadir terverifikasi';
+  }
+  let acc = 0;
   CATEGORIES.forEach(function (c) {
-    const d = byCategory[c] || { submitted: 0, verified: 0, sent: 0 };
-    const row = el('div', 'catRow');
-    const head = el('div', 'catHead');
-    head.append(el('span', null, c), el('b', null, fmtNum(d.verified) + (total ? ' (' + Math.round(d.verified / total * 100) + '%)' : '')));
-    const track = el('div', 'meter'); const fill = el('i', 'cat-' + c.toLowerCase());
-    fill.style.width = (total ? Math.round(d.verified / total * 100) : 0) + '%';
-    track.appendChild(fill);
-    row.append(head, track, el('small', null, 'Mengisi formulir ' + fmtNum(d.submitted) + ' | Sertifikat terkirim ' + fmtNum(d.sent)));
-    card.appendChild(row);
+    const d = byCategory[c] || { submitted: 0, verified: 0, sent: 0 }, pct = total ? d.verified / total * 100 : 0, k = c.toLowerCase();
+    const seg = svgEl('circle', { cx: 50, cy: 50, r: 38, class: 'seg seg-' + k, pathLength: 100, 'stroke-dashoffset': -acc, transform: 'rotate(-90 50 50)' });
+    seg.style.setProperty('--d', Math.max(0, pct - 0.8).toFixed(2)); acc += pct;
+    const li = el('li'); li.tabIndex = 0;
+    const head = el('b'); head.append(el('span', null, c), el('span', null, fmtNum(d.verified) + ' (' + Math.round(pct) + '%)'));
+    li.append(el('i', 'sw sw-' + k), head, el('small', null, 'Mengisi ' + fmtNum(d.submitted) + ', terkirim ' + fmtNum(d.sent)));
+    parts[c] = { seg: seg, li: li };
+    [seg, li].forEach(function (n) {
+      ['pointerenter', 'focus'].forEach(function (ev) { n.addEventListener(ev, function () { focusCat(c); }); });
+      ['pointerleave', 'blur'].forEach(function (ev) { n.addEventListener(ev, function () { focusCat(null); }); });
+    });
+    svg.appendChild(seg); list.appendChild(li);
+  });
+  svg.append(num, lab); box.append(svg, list); card.appendChild(box);
+  return card;
+}
+
+/** Corong: dari pengisi formulir sampai sertifikat terkirim. */
+function funnelCard(t) {
+  const card = el('div', 'statCard'), sub = t.submitted || 0;
+  card.appendChild(el('h3', null, 'Alur menuju sertifikat'));
+  card.appendChild(el('p', 'muted small2', 'Persentase dihitung dari seluruh pengisi formulir.'));
+  [['Mengisi formulir', t.submitted, 'sub'], ['Hadir terverifikasi', t.verified, 'ver'], ['Sertifikat terkirim', t.sent, 'sent']].forEach(function (s) {
+    const pct = sub ? Math.round((s[1] || 0) / sub * 100) : 0, row = el('div', 'fn'), head = el('div', 'fnHead'), track = el('div', 'fnTrack'), fill = el('i', 'fnBar fn-' + s[2]);
+    head.append(el('span', null, s[0]), el('b', null, fmtNum(s[1]) + ' (' + pct + '%)'));
+    fill.style.setProperty('--w', pct + '%'); track.appendChild(fill); row.append(head, track); card.appendChild(row);
   });
   return card;
 }
@@ -955,17 +1049,28 @@ function leaderCard(d, isAdmin) {
   return card;
 }
 
+function updateHeroStats(t, d) {
+  const box = $('heroStats'); if (!box) return;
+  box.textContent = '';
+  [['Guru berbeda hadir', d.uniqueTeachers], ['Hadir terverifikasi', t.verified], ['Sertifikat terkirim', t.sent]].forEach(function (x) {
+    const c = el('div', 'hs'), s = el('strong', null, fmtNum(x[1])); s.dataset.to = x[1] || 0;
+    c.append(s, el('span', null, x[0])); box.appendChild(c);
+  });
+  box.classList.remove('hidden'); reveal(box);
+}
+
 function renderStats(box, d, isAdmin) {
   box.innerHTML = '';
-  const t = d.totals || {};
+  const t = d.totals || {}, wk = d.weekly || [];
+  const sp = function (k) { return wk.map(function (w) { return w[k] || 0; }); };
   const grid = el('div', 'kpiGrid');
   grid.append(
-    kpiCard('Mengisi formulir', t.submitted, ''),
-    kpiCard('Hadir terverifikasi', t.verified, '', t.submitted ? Math.round((t.verified || 0) / t.submitted * 100) + '% dari pengisi' : ''),
-    kpiCard('Sertifikat terkirim', t.sent, 'k-gold'),
+    kpiCard('Mengisi formulir', t.submitted, '', '', null, sp('submitted')),
+    kpiCard('Hadir terverifikasi', t.verified, '', t.submitted ? Math.round((t.verified || 0) / t.submitted * 100) + '% dari pengisi' : '', null, sp('verified')),
+    kpiCard('Sertifikat terkirim', t.sent, 'k-gold', '', null, sp('sent')),
     kpiCard('Guru berbeda hadir', d.uniqueTeachers, '', fmtNum(d.activeWeeks) + ' pekan kegiatan')
   );
-  box.appendChild(grid);
+  box.appendChild(grid); reveal(grid);
   if (isAdmin) {
     const todo = el('div', 'kpiGrid todo');
     todo.append(
@@ -974,20 +1079,19 @@ function renderStats(box, d, isAdmin) {
       kpiCard('Gagal kirim', t.failed, 'k-red warn', '', function () { gotoValidation('GAGAL'); }),
       kpiCard('Ditolak', t.rejected, 'k-red warn', '', function () { gotoValidation('DITOLAK'); })
     );
-    box.appendChild(todo);
+    box.appendChild(todo); reveal(todo);
   }
-
   const chart = el('div', 'statCard wide');
   chart.appendChild(el('h3', null, 'Kehadiran dari pekan ke pekan'));
-  chart.appendChild(el('p', 'muted small2', '12 pekan terakhir (Senin-Minggu), berdasarkan waktu pengisian formulir.'));
-  chart.appendChild(chartLegend());
-  chart.appendChild(weeklyChart(d.weekly || []));
+  chart.appendChild(el('p', 'muted small2', '12 pekan terakhir (Senin-Minggu), berdasarkan waktu pengisian formulir. Sentuh grafik untuk melihat angka tiap pekan.'));
+  chart.appendChild(weeklyChartBlock(wk));
   box.appendChild(chart);
-
   const cols = el('div', 'statCols');
-  cols.append(categoryCard(d.byCategory || {}), leaderCard(d, isAdmin));
-  box.appendChild(cols);
+  cols.append(funnelCard(t), categoryCard(d.byCategory || {}));
+  box.appendChild(cols); reveal(cols);
+  box.appendChild(leaderCard(d, isAdmin));
   box.appendChild(el('p', 'muted small2', 'Hadir terverifikasi = data yang sudah disetujui admin. Diperbarui ' + fmtDate(d.generatedAt) + '.'));
+  if (!isAdmin) updateHeroStats(t, d);
 }
 
 async function loadPublicStats() {
