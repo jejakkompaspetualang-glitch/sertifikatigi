@@ -165,10 +165,10 @@ legend { padding:0 8px; font:700 1.25rem var(--serif); color:var(--ink); }
 .rows { display:grid; gap:8px; margin:8px 0; }
 .personRow { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; }
 .assetNote { margin-top:16px; font-size:.84rem; }
-.assets { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:10px; }
+.assets { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:10px; }
 .assetCard { border:1px solid var(--line); border-radius:12px; padding:12px; display:grid; gap:8px; align-content:start; }
 .assetCard p { margin:0; font-size:.8rem; }
-.assetPreview, .assetEmpty { width:100%; height:90px; border-radius:10px; background:var(--sky); object-fit:contain; }
+.assetPreview, .assetEmpty { width:100%; height:120px; border-radius:10px; background:var(--sky); object-fit:contain; }
 .assetEmpty { display:grid; place-items:center; color:var(--muted); font-size:.82rem; }
 .assetCard input[type=file] { padding:8px; font-size:.8rem; }
 #settingsPanel > .primary { width:100%; margin-top:22px; padding:15px; }
