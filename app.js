@@ -1065,11 +1065,75 @@ function updateHeroStats(t, d) {
   box.classList.remove('hidden'); reveal(box);
 }
 
+/* ===== Pelindung bentuk data dari backend =====
+   Respons Apps Script dapat berbeda/parsial (mis. versi Code.gs lama). Semua bagian tampilan membaca data
+   lewat fungsi-fungsi ini supaya angka kosong tidak menjadi "undefined"/NaN dan data tidak hilang diam-diam. */
+function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+function toNum(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+function txt(v) { return v == null ? '' : String(v); }
+
+function normalizeStats(d) {
+  const src = isObj(d) ? d : {};
+  const t = isObj(src.totals) ? src.totals : {};
+  const totals = {};
+  ['submitted', 'verified', 'sent', 'pending', 'processing', 'failed', 'rejected'].forEach(function (k) { totals[k] = toNum(t[k]); });
+  const weekly = (Array.isArray(src.weekly) ? src.weekly : []).filter(isObj).map(function (w) {
+    return Object.assign({}, w, { label: txt(w.label), submitted: toNum(w.submitted), verified: toNum(w.verified), sent: toNum(w.sent) });
+  });
+  const bc = isObj(src.byCategory) ? src.byCategory : {}, byCategory = {};
+  CATEGORIES.forEach(function (c) {
+    const r = bc[c] || bc[c.toLowerCase()] || bc[c.toUpperCase()];
+    const o = isObj(r) ? r : {};
+    byCategory[c] = { submitted: toNum(o.submitted), verified: toNum(o.verified), sent: toNum(o.sent) };
+  });
+  const top = (Array.isArray(src.top) ? src.top : []).filter(isObj).map(function (p) {
+    return Object.assign({}, p, { name: txt(p.name), org: txt(p.org), email: txt(p.email), weeks: toNum(p.weeks) });
+  });
+  return Object.assign({}, src, { totals: totals, weekly: weekly, byCategory: byCategory, top: top, uniqueTeachers: toNum(src.uniqueTeachers), activeWeeks: toNum(src.activeWeeks) });
+}
+
+function normalizeHistory(data) {
+  const src = Array.isArray(data) ? { items: data } : (isObj(data) ? data : {});
+  const items = (Array.isArray(src.items) ? src.items : []).filter(isObj);
+  let reviewers;
+  if (Array.isArray(src.reviewers)) {
+    reviewers = src.reviewers.filter(isObj);
+  } else { // server tidak mengirim rekap per petugas: hitung dari catatan yang ada
+    const map = {};
+    items.forEach(function (it) {
+      const key = txt(it.reviewer) + '|' + txt(it.role);
+      const r = map[key] || (map[key] = { name: txt(it.reviewer), role: it.role, approved: 0, rejected: 0, retried: 0, last: '' });
+      if (it.action === 'DISETUJUI') r.approved++; else if (it.action === 'DITOLAK') r.rejected++; else if (it.action === 'KIRIM ULANG') r.retried++;
+      const ts = new Date(it.timestamp).getTime();
+      if (!isNaN(ts) && (!r.last || ts > new Date(r.last).getTime())) r.last = it.timestamp;
+    });
+    reviewers = Object.keys(map).map(function (k) { return map[k]; });
+  }
+  reviewers = reviewers.map(function (r) {
+    return Object.assign({}, r, { name: txt(r.name) || '-', approved: toNum(r.approved), rejected: toNum(r.rejected), retried: toNum(r.retried) });
+  });
+  return { reviewers: reviewers, items: items };
+}
+
+/** Pesan galat di dalam panel (bukan teks polos), lengkap dengan tombol coba lagi. */
+function showLoadError(box, msg, retry) {
+  box.textContent = '';
+  box.appendChild(el('p', 'message error', msg));
+  const bar = el('div', 'toolbar'); bar.appendChild(actionButton('Coba lagi', 'secondary', retry));
+  box.appendChild(bar);
+}
+const BAD_SHAPE_HINT = ' Kemungkinan Code.gs di Apps Script belum versi terbaru: simpan Code.gs, lalu Deploy > Kelola deployment > Edit > Versi baru > Deploy.';
+function loadErrorText(err, what) {
+  if (err instanceof TypeError) return 'Data ' + what + ' diterima tetapi tidak dapat ditampilkan (format tidak sesuai).' + BAD_SHAPE_HINT;
+  return (err && err.message) || ('Gagal memuat ' + what + '.');
+}
+
 function statNoteText(d) { return 'Hadir terverifikasi = data yang sudah disetujui admin. Diperbarui ' + fmtDate(d.generatedAt) + '.'; }
 
-function renderStats(box, d, isAdmin) {
-  box.innerHTML = ''; box._d = d; box._admin = !!isAdmin;
-  const t = d.totals || {}, wk = d.weekly || [];
+function renderStats(box, raw, isAdmin) {
+  box.innerHTML = ''; box._d = raw; box._admin = !!isAdmin;
+  const d = normalizeStats(raw);
+  const t = d.totals, wk = d.weekly;
   const sp = function (k) { return wk.map(function (w) { return w[k] || 0; }); };
   const grid = el('div', 'kpiGrid');
   grid.append(
@@ -1139,19 +1203,21 @@ async function loadAdminStats() {
   try {
     const d = await api('stats', { token: tok });
     if (tok !== adminToken) return;
+    if (!isObj(d) || !isObj(d.totals)) { console.error('[stats] format respons tidak dikenali:', d); throw new Error('Server mengirim data rekapitulasi dengan format yang tidak dikenali.' + BAD_SHAPE_HINT); }
     renderStats(box, d, true);
   } catch (err) {
     if (tok !== adminToken) return;
-    box.textContent = err.message || 'Gagal memuat rekapitulasi.';
+    console.error('[stats]', err);
+    showLoadError(box, loadErrorText(err, 'rekapitulasi'), loadAdminStats);
     if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
 
 function historyLabel(a) { return a === 'DISETUJUI' ? 'Disetujui' : a === 'DITOLAK' ? 'Ditolak' : a === 'KIRIM ULANG' ? 'Kirim ulang' : a; }
 
-function renderHistory(box, data) {
+function renderHistory(box, raw) {
   box.innerHTML = '';
-  const reviewers = data.reviewers || [], items = data.items || [];
+  const norm = normalizeHistory(raw), reviewers = norm.reviewers, items = norm.items;
   if (!items.length) { box.appendChild(el('p', 'muted', 'Belum ada riwayat persetujuan.')); return; }
   const sum = el('div', 'statCard wide');
   sum.appendChild(el('h3', null, 'Rekap per petugas'));
@@ -1179,13 +1245,13 @@ function renderHistory(box, data) {
   items.forEach(function (it) {
     const tr = el('tr');
     tr.appendChild(el('td', null, fmtDate(it.timestamp)));
-    const tdA = el('td'); tdA.appendChild(el('span', 'tag tag-' + (it.action === 'DISETUJUI' ? 'ok' : it.action === 'DITOLAK' ? 'no' : 're'), historyLabel(it.action)));
+    const tdA = el('td'); tdA.appendChild(el('span', 'tag tag-' + (it.action === 'DISETUJUI' ? 'ok' : it.action === 'DITOLAK' ? 'no' : 're'), historyLabel(txt(it.action))));
     tr.appendChild(tdA);
-    const tdP = el('td'); tdP.append(el('b', null, it.fullName), el('small', null, it.category + ' | ' + it.email));
+    const tdP = el('td'); tdP.append(el('b', null, txt(it.fullName)), el('small', null, txt(it.category) + ' | ' + txt(it.email)));
     tr.appendChild(tdP);
-    const tdR = el('td'); tdR.append(el('b', null, it.reviewer), el('small', null, it.role === 'super' ? 'Super Admin' : 'Admin Validasi'));
+    const tdR = el('td'); tdR.append(el('b', null, txt(it.reviewer)), el('small', null, it.role === 'super' ? 'Super Admin' : 'Admin Validasi'));
     tr.appendChild(tdR);
-    tr.appendChild(el('td', null, it.note || '-'));
+    tr.appendChild(el('td', null, txt(it.note) || '-'));
     tbody.appendChild(tr);
   });
   table.appendChild(tbody); wrap.appendChild(table); box.appendChild(wrap);
@@ -1199,10 +1265,12 @@ async function loadHistory() {
   try {
     const d = await api('history', { token: tok });
     if (tok !== adminToken) return;
-    renderHistory(box, d || {});
+    if (!Array.isArray(d) && !(isObj(d) && Array.isArray(d.items))) { console.error('[history] format respons tidak dikenali:', d); throw new Error('Server mengirim data histori dengan format yang tidak dikenali.' + BAD_SHAPE_HINT); }
+    renderHistory(box, d);
   } catch (err) {
     if (tok !== adminToken) return;
-    box.textContent = err.message || 'Gagal memuat histori.';
+    console.error('[history]', err);
+    showLoadError(box, loadErrorText(err, 'histori'), loadHistory);
     if (isSessionError(err)) logoutAdmin(false, err.message);
   }
 }
