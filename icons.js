@@ -100,3 +100,19 @@
     });
   });
 })();
+
+/* Navigasi mengambang: tandai bagian halaman yang sedang dilihat. */
+(function () {
+  var links = document.querySelectorAll('.topnav a');
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  var map = {};
+  Array.prototype.forEach.call(links, function (a) { var t = document.querySelector(a.getAttribute('href')); if (t) map[t.id] = a; });
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      Array.prototype.forEach.call(links, function (a) { a.classList.remove('on'); });
+      map[e.target.id].classList.add('on');
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  Object.keys(map).forEach(function (k) { io.observe(document.getElementById(k)); });
+})();
