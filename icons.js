@@ -90,29 +90,56 @@
       if (el) new MutationObserver(run).observe(el, { childList: true, subtree: true, characterData: true });
     });
   }
-  // Klik tab: gulir ke panel terkait. Tidak mengubah logika tab di app.js.
-  [['publicTab', 'publicView'], ['adminTab', 'adminView']].forEach(function (p) {
-    var tab = document.getElementById(p[0]);
-    if (!tab) return;
-    tab.addEventListener('click', function () {
-      var panel = document.getElementById(p[1]);
-      if (panel && panel.scrollIntoView) setTimeout(function () { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 30);
-    });
+})();
+
+/* Tab & subtab: tanpa gulir otomatis (penyebab loncatan di ponsel). Saat panel berganti tinggi,
+   posisi bilah tab dijaga tetap di tempat yang sama pada layar. */
+(function () {
+  ['.tabs', '#subtabs'].forEach(function (sel) {
+    var bar = document.querySelector(sel);
+    if (!bar) return;
+    bar.addEventListener('click', function (e) {
+      if (!(e.target.closest && e.target.closest('button'))) return;
+      var before = bar.getBoundingClientRect().top;
+      requestAnimationFrame(function () { // setelah handler app.js mengganti panel
+        var d = bar.getBoundingClientRect().top - before;
+        if (Math.abs(d) > 1) window.scrollBy({ top: d, left: 0, behavior: 'instant' });
+      });
+    }, true);
   });
 })();
 
-/* Navigasi mengambang: tandai bagian halaman yang sedang dilihat. */
+/* Menu mengambang: sorotan mengikuti posisi gulir, tetapi dikunci selama gulir otomatis
+   setelah menu diketuk agar tidak berkedip melewati menu di antaranya. */
 (function () {
-  var links = document.querySelectorAll('.topnav a');
-  if (!links.length || !('IntersectionObserver' in window)) return;
-  var map = {};
-  Array.prototype.forEach.call(links, function (a) { var t = document.querySelector(a.getAttribute('href')); if (t) map[t.id] = a; });
-  var io = new IntersectionObserver(function (es) {
-    es.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      Array.prototype.forEach.call(links, function (a) { a.classList.remove('on'); });
-      map[e.target.id].classList.add('on');
-    });
-  }, { rootMargin: '-40% 0px -55% 0px' });
-  Object.keys(map).forEach(function (k) { io.observe(document.getElementById(k)); });
+  var nav = document.querySelector('.topnav');
+  if (!nav) return;
+  var links = Array.prototype.slice.call(nav.querySelectorAll('a'));
+  var items = links.map(function (a) { return { a: a, t: document.querySelector(a.getAttribute('href')) }; }).filter(function (x) { return x.t; });
+  if (!items.length) return;
+  var current = null, locked = false, lockTimer = 0, ticking = false;
+  function mark(a) {
+    if (a === current) return;
+    current = a;
+    links.forEach(function (x) { x.classList.toggle('on', x === a); });
+    var left = a.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2; // geser menu horizontal saja, bukan halaman
+    if (nav.scrollTo) nav.scrollTo({ left: left, behavior: 'smooth' }); else nav.scrollLeft = left;
+  }
+  function spy() {
+    ticking = false;
+    if (locked) return;
+    var line = window.innerHeight * 0.4, pick = items[0];
+    items.forEach(function (x) { if (x.t.getBoundingClientRect().top <= line) pick = x; });
+    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) pick = items[items.length - 1];
+    mark(pick.a);
+  }
+  function unlock() { locked = false; clearTimeout(lockTimer); spy(); }
+  window.addEventListener('scroll', function () {
+    if (locked) { clearTimeout(lockTimer); lockTimer = setTimeout(unlock, 150); return; } // selesai bila gulir diam 150 ms
+    if (!ticking) { ticking = true; requestAnimationFrame(spy); }
+  }, { passive: true });
+  links.forEach(function (a) {
+    a.addEventListener('click', function () { locked = true; mark(a); clearTimeout(lockTimer); lockTimer = setTimeout(unlock, 500); });
+  });
+  spy();
 })();
