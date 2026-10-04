@@ -386,6 +386,24 @@ const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'even
 let settingsLoaded = false;
 let DEFAULT_LINEUP = '';
 let customLineup = false;
+let DEFAULT_DESC = '';
+let DEFAULT_PEOPLE = {};
+
+/** Baca daftar pengisi acara bawaan di index.html agar muncul (dan dapat diedit) di Pengaturan Acara bila server belum menyimpan data. */
+function parseDefaultPeople(html) {
+  const out = {};
+  const box = document.createElement('div'); box.innerHTML = html;
+  Array.from(box.children).forEach(function (item) {
+    const dt = item.querySelector('dt'), dd = item.querySelector('dd');
+    if (!dt || !dd) return;
+    const role = ROLES.filter(function (r) { return r.label.toLowerCase() === dt.textContent.trim().toLowerCase(); })[0];
+    if (!role) return;
+    const small = dd.querySelector('small');
+    const name = Array.from(dd.childNodes).filter(function (n) { return n.nodeType === 3; }).map(function (n) { return n.textContent; }).join('').trim();
+    (out[role.key] = out[role.key] || []).push({ name: name, title: small ? small.textContent.trim() : '' });
+  });
+  return out;
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -569,9 +587,11 @@ async function loadSettings() {
   try {
     const res = await api('getSettings', { token: adminToken });
     SETTING_FIELDS.forEach(function (k) { $('s_' + k).value = res.settings[k] || ''; });
+    if (!$('s_eventDescription').value) $('s_eventDescription').value = DEFAULT_DESC;
     ROLES.forEach(function (r) {
       $('rows-' + r.key).textContent = '';
-      (res.settings[r.key] || []).forEach(function (p) { addPersonRow(r, p); });
+      const saved = res.settings[r.key];
+      (saved && saved.length ? saved : (DEFAULT_PEOPLE[r.key] || [])).forEach(function (p) { addPersonRow(r, p); });
       updateCount(r);
     });
     ASSETS.forEach(function (a) { setAssetPreview(a.key, (res.assets && res.assets[a.key]) || ''); });
@@ -620,6 +640,8 @@ if (!apiConfigured()) {
   message('publicMessage', 'Layanan pendaftaran belum tersedia. Silakan hubungi panitia.', 'warning');
 }
 DEFAULT_LINEUP = $('peopleList').innerHTML;
+DEFAULT_DESC = $('eventDesc').textContent.trim();
+DEFAULT_PEOPLE = parseDefaultPeople(DEFAULT_LINEUP);
 showView('public');
 loadCachedConfig();
 loadConfig();
