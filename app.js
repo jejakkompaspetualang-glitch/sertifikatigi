@@ -11,6 +11,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyJuN4OO3pHJxnuFSLOZkAr
 const REQUEST_TIMEOUT_MS = 90000; // membuat PDF + mengirim email dapat memakan waktu puluhan detik
 
 let adminToken = '';
+let adminRole = ''; // 'super' = super admin (semua fitur), 'validator' = admin validasi saja
 let actionRunning = false;
 
 const $ = function (id) { return document.getElementById(id); };
@@ -154,11 +155,13 @@ async function onLogin(ev) {
     const res = await api('login', { password: password });
     if (!res || !res.token) throw new Error('Sesi tidak dapat dibuat. Silakan coba kembali.');
     adminToken = res.token;
+    adminRole = res.role === 'validator' ? 'validator' : 'super';
+    applyRole();
     $('loginPanel').classList.add('hidden');
     $('dashboard').classList.remove('hidden');
     $('adminPassword').value = '';
     message('loginMessage', '', '');
-    message('adminMessage', 'Berhasil masuk. Sesi berlaku hingga 6 jam.', 'success');
+    message('adminMessage', (adminRole === 'validator' ? 'Berhasil masuk sebagai Admin Validasi. ' : 'Berhasil masuk sebagai Super Admin. ') + 'Sesi berlaku hingga 6 jam.', 'success');
     loadSubmissions();
   } catch (err) {
     message('loginMessage', err.message || 'Gagal masuk.', 'error');
@@ -361,6 +364,7 @@ function logoutAdmin(callServer, reason) {
   const shouldCall = callServer !== false;
   const oldToken = adminToken;
   adminToken = '';
+  adminRole = '';
   if (shouldCall && oldToken) api('logout', { token: oldToken }).catch(function () { /* sesi kedaluwarsa sendiri */ });
   $('dashboard').classList.add('hidden');
   $('loginPanel').classList.remove('hidden');
@@ -546,8 +550,18 @@ function renderWordingPreview() {
   add('pvMail pvPre', renderTemplate(W.emailBody, V));
 }
 
+/** Admin validasi hanya melihat tab Validasi Data; Pengaturan Acara khusus super admin. */
+function applyRole() {
+  const isSuper = adminRole === 'super';
+  $('subtabs').classList.toggle('hidden', !isSuper);
+  $('dashDesc').textContent = isSuper
+    ? 'Verifikasi data kehadiran dan kelola informasi kegiatan.'
+    : 'Verifikasi data kehadiran peserta, narasumber, dan panitia.';
+  showAdminPanel('validation');
+}
+
 function showAdminPanel(which) {
-  const isSettings = which === 'settings';
+  const isSettings = which === 'settings' && adminRole === 'super';
   $('validationPanel').classList.toggle('hidden', isSettings);
   $('settingsPanel').classList.toggle('hidden', !isSettings);
   $('validationTab').classList.toggle('active', !isSettings);
