@@ -1125,7 +1125,7 @@ async function loadPublicStats() {
     else { const n = box.querySelector('.statNote'); if (n) n.textContent = statNoteText(data); }
     try { localStorage.setItem(STATS_KEY, JSON.stringify(data)); } catch (e) { /* kuota/izin */ }
   } catch (err) {
-    if (!shown) { box.innerHTML = ''; box.appendChild(el('p', 'muted', 'Statistik belum dapat dimuat saat ini.')); }
+    if (!shown) { box.innerHTML = ''; box.appendChild(el('p', 'muted', 'Statistik belum dapat dimuat saat ini.')); if ($('heroStats')) $('heroStats').classList.add('hidden'); }
     console.warn('[stats] ' + (err && err.message));
   } finally {
     clearTimeout(timer);
