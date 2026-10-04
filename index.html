@@ -4,18 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://*.googleusercontent.com; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#061a52">
   <meta name="description" content="Ngabaso IGA Edisi #22 - Pemanfaatan Canva dan Cloud Service dalam Pembuatan Video Pembelajaran Interaktif. IGI Kabupaten Garut.">
   <title>Ngabaso IGA Edisi #22 - Sertifikat Digital</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="theme.css">
 </head>
 <body>
   <main class="shell">
+    <nav class="topnav" aria-label="Menu halaman"><a href="#beranda" class="on">Beranda</a><a href="#pengisi">Pengisi acara</a><a href="#formulir">Kehadiran</a><a href="#publicStats">Dasbor</a></nav>
 
-
-    <header class="hero">
+    <header class="hero" id="beranda">
       <p class="org" id="orgName">Ikatan Guru Indonesia (IGI) Kabupaten Garut</p>
       <h1 id="eventName">NGABASO IGA EDISI #22</h1>
       <p class="theme" id="eventTheme">Pemanfaatan Canva dan Cloud Service dalam Pembuatan Video Pembelajaran Interaktif</p>
@@ -27,9 +29,10 @@
         <li><span class="ci"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/></svg></span>Guru semua jenjang</li>
       </ul>
       <p class="tagline"><span>Sharing and Growing Together</span><span>Pantang Mengajar Kalau Tidak Belajar</span></p>
+      <div class="heroStats hidden" id="heroStats" aria-label="Ringkasan kehadiran"></div>
     </header>
 
-    <section class="lineup" aria-labelledby="lineupTitle">
+    <section class="lineup" id="pengisi" aria-labelledby="lineupTitle">
       <h2 id="lineupTitle">Susunan Pengisi Acara</h2>
       <dl class="people" id="peopleList">
         <div><span class="avatar" data-icon="1" aria-hidden="true"><svg class="sil" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="33" r="13" fill="#1d4fb8"/><path d="M14 84c1-17 12-25 28-25s27 8 28 25z" fill="#1d4fb8"/></svg><i class="badge b-keynote"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/></svg></i></span><dt>Pembicara Utama</dt><dd>Ita Octavia, S.Ag., M.Pd.I<small>Ketua IGI Kab. Garut</small></dd></div>
@@ -44,7 +47,7 @@
       <button class="tab" id="adminTab" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>Admin</button>
     </nav>
 
-    <div class="workspace">
+    <div class="workspace" id="formulir">
     <section id="publicView" class="panel">
       <h2>Formulir Kehadiran</h2>
       <p class="muted">Mohon lengkapi data dengan cermat. Sertifikat akan dikirimkan ke alamat email Anda setelah data diverifikasi dan disetujui oleh admin.</p>
