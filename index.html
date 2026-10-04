@@ -47,7 +47,7 @@
     <div class="workspace">
     <section id="publicView" class="panel">
       <h2>Formulir Kehadiran</h2>
-      <p class="muted">Lengkapi data dengan benar. Sertifikat akan dikirim ke email Anda setelah data diverifikasi dan disetujui oleh admin.</p>
+      <p class="muted">Mohon lengkapi data dengan cermat. Sertifikat akan dikirimkan ke alamat email Anda setelah data diverifikasi dan disetujui oleh admin.</p>
       <form id="attendanceForm">
         <label for="fullName">Nama lengkap sesuai sertifikat <span>*</span></label>
         <input id="fullName" name="fullName" required minlength="3" maxlength="120" autocomplete="name">
@@ -74,7 +74,7 @@
           <input id="website" name="website" tabindex="-1" autocomplete="off">
         </div>
 
-        <label class="consent"><input type="checkbox" id="confirmData" required> Saya memastikan data yang dikirim benar dan menyetujui penggunaannya untuk verifikasi kehadiran serta pengiriman sertifikat.</label>
+        <label class="consent"><input type="checkbox" id="confirmData" required> Saya menyatakan bahwa data yang disampaikan adalah benar dan menyetujui penggunaannya untuk keperluan verifikasi kehadiran serta penerbitan sertifikat.</label>
         <button class="primary" id="submitBtn" type="submit">Kirim Formulir</button>
       </form>
       <div id="publicMessage" class="message" role="status" aria-live="polite"></div>
@@ -83,7 +83,7 @@
     <section id="adminView" class="panel hidden">
       <div id="loginPanel">
         <h2>Masuk Admin</h2>
-        <p class="muted">Masukkan kata sandi administrator untuk mengelola data kehadiran peserta.</p>
+        <p class="muted">Masukkan kata sandi administrator untuk mengelola data kehadiran dan penerbitan sertifikat.</p>
         <form id="loginForm">
           <label for="adminPassword">Kata sandi admin</label>
           <input id="adminPassword" type="password" required autocomplete="current-password">
@@ -156,7 +156,9 @@
             <input id="s_signerName" maxlength="120">
             <label for="s_signerTitle">Jabatan penandatangan</label>
             <input id="s_signerTitle" maxlength="120">
-            <p class="muted assetNote">Gunakan berkas PNG transparan agar tanda tangan dan stempel tampil rapi pada sertifikat. Gambar tersimpan otomatis setelah dipilih.</p>
+            <label for="s_signerNta">NTA (Nomor Tanda Anggota) penandatangan</label>
+            <input id="s_signerNta" maxlength="40" placeholder="Contoh: 1234567890 (dicetak di bawah nama)">
+            <p class="muted assetNote">Unggah tanda tangan dan stempel sebagai satu berkas PNG transparan (tanda tangan di atas stempel) agar tampil rapi pada sertifikat. Gambar tersimpan otomatis setelah dipilih.</p>
             <div id="assetEditor" class="assets"></div>
           </fieldset>
           <button class="primary" id="saveSettingsBtn" type="submit">Simpan pengaturan</button>
@@ -165,7 +167,7 @@
     </section>
     </div>
 
-    <footer>Ngabaso IGA diselenggarakan oleh IGI Kabupaten Garut. Sertifikat diterbitkan setelah data diverifikasi.</footer>
+    <footer>Ngabaso IGA diselenggarakan oleh IGI Kabupaten Garut. Sertifikat diterbitkan setelah data kehadiran diverifikasi.</footer>
   </main>
 
   <script src="app.js" defer></script>
