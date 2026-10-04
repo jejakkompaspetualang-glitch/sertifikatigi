@@ -152,16 +152,17 @@ async function onLogin(ev) {
   setBusy('loginBtn', true, 'Memverifikasi...');
   message('loginMessage', 'Memverifikasi akses...', '');
   try {
-    const res = await api('login', { password: password });
+    const res = await api('login', { password: password, name: $('adminName').value });
     if (!res || !res.token) throw new Error('Sesi tidak dapat dibuat. Silakan coba kembali.');
     adminToken = res.token;
     adminRole = res.role === 'validator' ? 'validator' : 'super';
+    try { localStorage.setItem('igiAdminName', res.name || ''); } catch (e) { /* abaikan */ }
     applyRole();
     $('loginPanel').classList.add('hidden');
     $('dashboard').classList.remove('hidden');
     $('adminPassword').value = '';
     message('loginMessage', '', '');
-    message('adminMessage', (adminRole === 'validator' ? 'Berhasil masuk sebagai Admin Validasi. ' : 'Berhasil masuk sebagai Super Admin. ') + 'Sesi berlaku hingga 6 jam.', 'success');
+    message('adminMessage', 'Berhasil masuk sebagai ' + (adminRole === 'validator' ? 'Admin Validasi' : 'Super Admin') + ' (' + (res.name || '-') + '). ' + 'Sesi berlaku hingga 6 jam.', 'success');
     loadSubmissions();
   } catch (err) {
     message('loginMessage', err.message || 'Gagal masuk.', 'error');
@@ -372,6 +373,8 @@ function logoutAdmin(callServer, reason) {
   settingsLoaded = false;
   showAdminPanel('validation');
   $('submissionList').textContent = 'Silakan masuk untuk memuat data.';
+  $('adminStats').textContent = '';
+  $('adminHistory').textContent = '';
   message('loginMessage', reason || 'Anda telah keluar.', reason ? 'warning' : '');
 }
 
@@ -550,23 +553,31 @@ function renderWordingPreview() {
   add('pvMail pvPre', renderTemplate(W.emailBody, V));
 }
 
-/** Admin validasi hanya melihat tab Validasi Data; Pengaturan Acara khusus super admin. */
+/** Admin validasi melihat Validasi, Rekapitulasi, dan Histori; Pengaturan Acara khusus super admin. */
 function applyRole() {
   const isSuper = adminRole === 'super';
-  $('subtabs').classList.toggle('hidden', !isSuper);
+  $('settingsTab').classList.toggle('hidden', !isSuper);
   $('dashDesc').textContent = isSuper
-    ? 'Verifikasi data kehadiran dan kelola informasi kegiatan.'
-    : 'Verifikasi data kehadiran peserta, narasumber, dan panitia.';
+    ? 'Verifikasi data, pantau rekapitulasi dan histori persetujuan, serta kelola informasi kegiatan.'
+    : 'Verifikasi data, pantau rekapitulasi, dan lihat histori persetujuan.';
   showAdminPanel('validation');
 }
 
+const ADMIN_PANELS = {
+  validation: ['validationPanel', 'validationTab'], stats: ['statsPanel', 'statsTab'],
+  history: ['historyPanel', 'historyTab'], settings: ['settingsPanel', 'settingsTab']
+};
+
 function showAdminPanel(which) {
-  const isSettings = which === 'settings' && adminRole === 'super';
-  $('validationPanel').classList.toggle('hidden', isSettings);
-  $('settingsPanel').classList.toggle('hidden', !isSettings);
-  $('validationTab').classList.toggle('active', !isSettings);
-  $('settingsTab').classList.toggle('active', isSettings);
-  if (isSettings && !settingsLoaded) loadSettings();
+  if (which === 'settings' && adminRole !== 'super') which = 'validation';
+  Object.keys(ADMIN_PANELS).forEach(function (k) {
+    $(ADMIN_PANELS[k][0]).classList.toggle('hidden', k !== which);
+    $(ADMIN_PANELS[k][1]).classList.toggle('active', k === which);
+  });
+  if (!adminToken) return;
+  if (which === 'settings' && !settingsLoaded) loadSettings();
+  if (which === 'stats') loadAdminStats();
+  if (which === 'history') loadHistory();
 }
 
 function buildPeopleEditor() {
@@ -786,6 +797,10 @@ $('wordingResetBtn').addEventListener('click', async function () {
 
 $('validationTab').addEventListener('click', function () { showAdminPanel('validation'); });
 $('settingsTab').addEventListener('click', function () { showAdminPanel('settings'); });
+$('statsTab').addEventListener('click', function () { showAdminPanel('stats'); });
+$('historyTab').addEventListener('click', function () { showAdminPanel('history'); });
+$('reloadStatsBtn').addEventListener('click', loadAdminStats);
+$('reloadHistoryBtn').addEventListener('click', loadHistory);
 $('settingsPanel').addEventListener('submit', onSaveSettings);
 $('publicTab').addEventListener('click', function () { showView('public'); });
 $('adminTab').addEventListener('click', function () { showView('admin'); });
@@ -801,6 +816,271 @@ if (!apiConfigured()) {
 DEFAULT_LINEUP = $('peopleList').innerHTML;
 DEFAULT_DESC = $('eventDesc').textContent.trim();
 DEFAULT_PEOPLE = parseDefaultPeople(DEFAULT_LINEUP);
+try { $('adminName').value = localStorage.getItem('igiAdminName') || ''; } catch (e) { /* abaikan */ }
 showView('public');
 loadCachedConfig();
 loadConfig();
+loadPublicStats();
+
+
+/* ===== Rekapitulasi (infografis), histori persetujuan, dan dasbor publik ===== */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const CATEGORIES = ['Peserta', 'Narasumber', 'Panitia'];
+
+function svgEl(tag, attrs, text) {
+  const n = document.createElementNS(SVGNS, tag);
+  Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+  if (text != null) n.textContent = text;
+  return n;
+}
+function fmtNum(n) { return Number(n || 0).toLocaleString('id-ID'); }
+
+function kpiCard(label, value, cls, note, onClick) {
+  const c = el(onClick ? 'button' : 'div', 'kpi ' + (cls || '') + (onClick ? ' link' : ''));
+  if (onClick) { c.type = 'button'; c.addEventListener('click', onClick); }
+  c.append(el('strong', null, fmtNum(value)), el('span', null, label));
+  if (note) c.appendChild(el('small', null, note));
+  return c;
+}
+
+/** Kerangka abu berdenyut selama data dimuat. */
+function skeleton(box) {
+  box.innerHTML = '';
+  const g = el('div', 'kpiGrid');
+  for (let i = 0; i < 4; i++) g.appendChild(el('div', 'kpi sk'));
+  box.append(g, el('div', 'statCard wide sk skBlock'));
+}
+
+/** Buka tab Validasi dengan filter status tertentu (dari kartu angka admin). */
+function gotoValidation(status) {
+  $('statusFilter').value = status;
+  showAdminPanel('validation');
+  loadSubmissions();
+}
+
+function weeklyChart(weekly) {
+  const W = 720, H = 270, L = 38, R = 10, T = 18, B = 40;
+  const plotW = W - L - R, plotH = H - T - B;
+  let max = 4;
+  weekly.forEach(function (w) { max = Math.max(max, w.submitted, w.verified, w.sent); });
+  const top = Math.ceil(max / 4) * 4;
+  const root = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Grafik kehadiran per pekan' });
+  for (let i = 0; i <= 4; i++) {
+    const v = top / 4 * i, y = T + plotH - plotH * (v / top);
+    root.appendChild(svgEl('line', { x1: L, x2: W - R, y1: y, y2: y, class: 'grid' }));
+    root.appendChild(svgEl('text', { x: L - 6, y: y + 3, class: 'axis end' }, String(v)));
+  }
+  const series = [['submitted', 'bar-sub', 'Mengisi formulir'], ['verified', 'bar-ver', 'Hadir terverifikasi'], ['sent', 'bar-sent', 'Sertifikat terkirim']];
+  const gw = plotW / weekly.length, bw = Math.min(14, (gw - 8) / 3);
+  weekly.forEach(function (w, i) {
+    const gx = L + gw * i + (gw - bw * 3) / 2;
+    series.forEach(function (s, j) {
+      const v = w[s[0]], h = plotH * (v / top);
+      const bar = svgEl('rect', { x: gx + bw * j, y: T + plotH - h, width: Math.max(1, bw - 1), height: v ? Math.max(h, 1.5) : 0, rx: 2, class: s[1] });
+      bar.appendChild(svgEl('title', {}, 'Pekan ' + w.label + ' - ' + s[2] + ': ' + v));
+      root.appendChild(bar);
+      if (s[0] === 'verified' && v > 0) root.appendChild(svgEl('text', { x: gx + bw * j + bw / 2, y: T + plotH - h - 4, class: 'val' }, String(v)));
+    });
+    root.appendChild(svgEl('text', { x: L + gw * i + gw / 2, y: H - B + 16, class: 'axis mid' }, w.label));
+  });
+  return root;
+}
+
+function chartLegend() {
+  const box = el('div', 'legend');
+  [['bar-sub', 'Mengisi formulir'], ['bar-ver', 'Hadir terverifikasi'], ['bar-sent', 'Sertifikat terkirim']].forEach(function (x) {
+    const item = el('span', 'lg');
+    const dot = svgEl('svg', { viewBox: '0 0 10 10', width: '10', height: '10', 'aria-hidden': 'true' });
+    dot.appendChild(svgEl('rect', { width: 10, height: 10, rx: 2, class: x[0] }));
+    item.append(dot, document.createTextNode(' ' + x[1]));
+    box.appendChild(item);
+  });
+  return box;
+}
+
+function categoryCard(byCategory) {
+  const card = el('div', 'statCard');
+  card.appendChild(el('h3', null, 'Hadir per kategori'));
+  let total = 0;
+  CATEGORIES.forEach(function (c) { total += (byCategory[c] || {}).verified || 0; });
+  CATEGORIES.forEach(function (c) {
+    const d = byCategory[c] || { submitted: 0, verified: 0, sent: 0 };
+    const row = el('div', 'catRow');
+    const head = el('div', 'catHead');
+    head.append(el('span', null, c), el('b', null, fmtNum(d.verified) + (total ? ' (' + Math.round(d.verified / total * 100) + '%)' : '')));
+    const track = el('div', 'meter'); const fill = el('i', 'cat-' + c.toLowerCase());
+    fill.style.width = (total ? Math.round(d.verified / total * 100) : 0) + '%';
+    track.appendChild(fill);
+    row.append(head, track, el('small', null, 'Mengisi formulir ' + fmtNum(d.submitted) + ' | Sertifikat terkirim ' + fmtNum(d.sent)));
+    card.appendChild(row);
+  });
+  return card;
+}
+
+function leaderCard(d, isAdmin) {
+  const card = el('div', 'statCard');
+  card.appendChild(el('h3', null, 'Guru paling rajin hadir'));
+  if (!d.leaderboard) { card.appendChild(el('p', 'muted', 'Daftar ini tidak ditampilkan.')); return card; }
+  if (!d.top || !d.top.length) { card.appendChild(el('p', 'muted', 'Belum ada kehadiran terverifikasi.')); return card; }
+  card.appendChild(el('p', 'muted small2', 'Dihitung dari jumlah pekan berbeda dengan kehadiran terverifikasi (dari ' + fmtNum(d.activeWeeks) + ' pekan kegiatan).'));
+  const podium = el('div', 'podium');
+  d.top.slice(0, 3).forEach(function (p, i) {
+    const c = el('div', 'pod p' + (i + 1));
+    c.appendChild(el('span', 'av', initials(p.name) || String(i + 1)));
+    c.appendChild(el('span', 'medal', ['Juara 1', 'Juara 2', 'Juara 3'][i]));
+    c.appendChild(el('b', null, p.name));
+    const sub = (isAdmin ? [p.org, p.email] : [p.org]).filter(Boolean).join(' | ');
+    if (sub) c.appendChild(el('small', null, sub));
+    c.appendChild(el('em', null, p.weeks + ' pekan'));
+    podium.appendChild(c);
+  });
+  card.appendChild(podium);
+  if (d.top.length > 3) {
+    const list = el('ol', 'rank');
+    d.top.slice(3).forEach(function (p, i) {
+      const li = el('li');
+      li.appendChild(el('span', 'pos', String(i + 4)));
+      const who = el('div', 'who');
+      who.appendChild(el('b', null, p.name));
+      const sub = (isAdmin ? [p.org, p.email] : [p.org]).filter(Boolean).join(' | ');
+      if (sub) who.appendChild(el('small', null, sub));
+      const track = el('div', 'meter'); const fill = el('i', 'cat-peserta');
+      fill.style.width = (d.activeWeeks ? Math.min(100, Math.round(p.weeks / d.activeWeeks * 100)) : 0) + '%';
+      track.appendChild(fill); who.appendChild(track);
+      li.append(who, el('span', 'score', p.weeks + ' pekan'));
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+  }
+  return card;
+}
+
+function renderStats(box, d, isAdmin) {
+  box.innerHTML = '';
+  const t = d.totals || {};
+  const grid = el('div', 'kpiGrid');
+  grid.append(
+    kpiCard('Mengisi formulir', t.submitted, ''),
+    kpiCard('Hadir terverifikasi', t.verified, '', t.submitted ? Math.round((t.verified || 0) / t.submitted * 100) + '% dari pengisi' : ''),
+    kpiCard('Sertifikat terkirim', t.sent, 'k-gold'),
+    kpiCard('Guru berbeda hadir', d.uniqueTeachers, '', fmtNum(d.activeWeeks) + ' pekan kegiatan')
+  );
+  box.appendChild(grid);
+  if (isAdmin) {
+    const todo = el('div', 'kpiGrid todo');
+    todo.append(
+      kpiCard('Menunggu validasi', t.pending, 'k-amber warn', 'Klik untuk memvalidasi', function () { gotoValidation('MENUNGGU VALIDASI'); }),
+      kpiCard('Diproses / tertahan', t.processing, 'k-amber warn', '', function () { gotoValidation('DISETUJUI'); }),
+      kpiCard('Gagal kirim', t.failed, 'k-red warn', '', function () { gotoValidation('GAGAL'); }),
+      kpiCard('Ditolak', t.rejected, 'k-red warn', '', function () { gotoValidation('DITOLAK'); })
+    );
+    box.appendChild(todo);
+  }
+
+  const chart = el('div', 'statCard wide');
+  chart.appendChild(el('h3', null, 'Kehadiran dari pekan ke pekan'));
+  chart.appendChild(el('p', 'muted small2', '12 pekan terakhir (Senin-Minggu), berdasarkan waktu pengisian formulir.'));
+  chart.appendChild(chartLegend());
+  chart.appendChild(weeklyChart(d.weekly || []));
+  box.appendChild(chart);
+
+  const cols = el('div', 'statCols');
+  cols.append(categoryCard(d.byCategory || {}), leaderCard(d, isAdmin));
+  box.appendChild(cols);
+  box.appendChild(el('p', 'muted small2', 'Hadir terverifikasi = data yang sudah disetujui admin. Diperbarui ' + fmtDate(d.generatedAt) + '.'));
+}
+
+async function loadPublicStats() {
+  if (!apiConfigured()) { $('publicStats').classList.add('hidden'); return; }
+  const box = $('publicStatsBody');
+  skeleton(box);
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, 25000);
+  try {
+    const res = await fetch(API_URL + '?action=stats', { signal: controller.signal });
+    const json = parseBackend(await res.text());
+    if (!json || json.ok !== true) throw new Error('stats');
+    renderStats(box, json.data || {}, false);
+  } catch (err) {
+    box.innerHTML = '';
+    box.appendChild(el('p', 'muted', 'Statistik belum dapat dimuat saat ini.'));
+    console.warn('[stats] ' + (err && err.message));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadAdminStats() {
+  if (!adminToken) return;
+  const box = $('adminStats'), tok = adminToken;
+  skeleton(box);
+  try {
+    const d = await api('stats', { token: tok });
+    if (tok !== adminToken) return;
+    renderStats(box, d, true);
+  } catch (err) {
+    if (tok !== adminToken) return;
+    box.textContent = err.message || 'Gagal memuat rekapitulasi.';
+    if (isSessionError(err)) logoutAdmin(false, err.message);
+  }
+}
+
+function historyLabel(a) { return a === 'DISETUJUI' ? 'Disetujui' : a === 'DITOLAK' ? 'Ditolak' : a === 'KIRIM ULANG' ? 'Kirim ulang' : a; }
+
+function renderHistory(box, data) {
+  box.innerHTML = '';
+  const reviewers = data.reviewers || [], items = data.items || [];
+  if (!items.length) { box.appendChild(el('p', 'muted', 'Belum ada riwayat persetujuan.')); return; }
+  const sum = el('div', 'statCard wide');
+  sum.appendChild(el('h3', null, 'Rekap per petugas'));
+  let max = 1;
+  reviewers.forEach(function (r) { max = Math.max(max, r.approved + r.rejected + r.retried); });
+  reviewers.forEach(function (r) {
+    const row = el('div', 'catRow');
+    const head = el('div', 'catHead');
+    head.append(el('span', null, r.name + (r.role === 'super' ? ' (Super Admin)' : ' (Admin Validasi)')),
+      el('b', null, r.approved + ' disetujui | ' + r.rejected + ' ditolak' + (r.retried ? ' | ' + r.retried + ' kirim ulang' : '')));
+    const track = el('div', 'meter'); const fill = el('i', 'cat-peserta');
+    fill.style.width = Math.round((r.approved + r.rejected + r.retried) / max * 100) + '%';
+    track.appendChild(fill);
+    row.append(head, track, el('small', null, 'Aktivitas terakhir ' + fmtDate(r.last)));
+    sum.appendChild(row);
+  });
+  box.appendChild(sum);
+
+  const wrap = el('div', 'tableWrap');
+  const table = el('table', 'histTable');
+  const thead = el('thead'); const hr = el('tr');
+  ['Waktu', 'Aksi', 'Penerima', 'Petugas', 'Catatan'].forEach(function (h) { hr.appendChild(el('th', null, h)); });
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = el('tbody');
+  items.forEach(function (it) {
+    const tr = el('tr');
+    tr.appendChild(el('td', null, fmtDate(it.timestamp)));
+    const tdA = el('td'); tdA.appendChild(el('span', 'tag tag-' + (it.action === 'DISETUJUI' ? 'ok' : it.action === 'DITOLAK' ? 'no' : 're'), historyLabel(it.action)));
+    tr.appendChild(tdA);
+    const tdP = el('td'); tdP.append(el('b', null, it.fullName), el('small', null, it.category + ' | ' + it.email));
+    tr.appendChild(tdP);
+    const tdR = el('td'); tdR.append(el('b', null, it.reviewer), el('small', null, it.role === 'super' ? 'Super Admin' : 'Admin Validasi'));
+    tr.appendChild(tdR);
+    tr.appendChild(el('td', null, it.note || '-'));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); wrap.appendChild(table); box.appendChild(wrap);
+  if (items.length >= 300) box.appendChild(el('p', 'muted small2', 'Menampilkan 300 catatan terbaru. Riwayat lengkap ada di sheet ApprovalHistory.'));
+}
+
+async function loadHistory() {
+  if (!adminToken) return;
+  const box = $('adminHistory'), tok = adminToken;
+  skeleton(box);
+  try {
+    const d = await api('history', { token: tok });
+    if (tok !== adminToken) return;
+    renderHistory(box, d || {});
+  } catch (err) {
+    if (tok !== adminToken) return;
+    box.textContent = err.message || 'Gagal memuat histori.';
+    if (isSessionError(err)) logoutAdmin(false, err.message);
+  }
+}
