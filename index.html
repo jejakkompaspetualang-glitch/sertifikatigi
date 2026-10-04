@@ -158,8 +158,22 @@
             <input id="s_signerTitle" maxlength="120">
             <label for="s_signerNta">NTA (Nomor Tanda Anggota) penandatangan</label>
             <input id="s_signerNta" maxlength="40" placeholder="Contoh: 1234567890 (dicetak di bawah nama)">
-            <p class="muted assetNote">Unggah tanda tangan dan stempel sebagai satu berkas PNG transparan (tanda tangan di atas stempel) agar tampil rapi pada sertifikat. Gambar tersimpan otomatis setelah dipilih.</p>
+            <p class="muted assetNote">Unggah tanda tangan dan stempel sebagai satu berkas PNG transparan (tanda tangan di atas stempel). Latar sertifikat dapat diganti dengan gambar A4 landscape; area tengah sebaiknya cukup lapang untuk teks. Gambar tersimpan otomatis setelah dipilih.</p>
             <div id="assetEditor" class="assets"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Redaksi sertifikat dan email</legend>
+            <p class="muted">Ubah kalimat yang tercetak pada sertifikat dan yang dikirim lewat email. Gunakan kode dalam kurung kurawal agar data terisi otomatis. Tanda [ ] membuat bagian di dalamnya hanya tampil bila datanya terisi. Kolom yang dikosongkan akan kembali ke redaksi bawaan.</p>
+            <p class="muted placeholderHelp" id="placeholderHelp"></p>
+            <div id="wordingEditor"></div>
+            <div class="wordingTools"><button class="secondary small" id="wordingResetBtn" type="button">Kembalikan redaksi ke bawaan</button></div>
+            <h4 class="previewHead">Pratinjau redaksi</h4>
+            <div class="previewBar">
+              <label for="previewCategory">Kategori contoh</label>
+              <select id="previewCategory"><option>Peserta</option><option>Narasumber</option><option>Panitia</option></select>
+            </div>
+            <div class="wordingPreview" id="wordingPreview" aria-live="polite"></div>
+            <p class="muted assetNote">Pratinjau memakai data contoh dan isian di atas. Tampilan akhir sertifikat (PDF) dapat dicek lewat fungsi testCertificatePreview di Apps Script.</p>
           </fieldset>
           <button class="primary" id="saveSettingsBtn" type="submit">Simpan pengaturan</button>
         </form>
