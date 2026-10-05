@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 90000; // membuat PDF + mengirim email dapat memakan 
 let adminToken = '';
 let adminRole = ''; // 'super' = super admin (semua fitur), 'validator' = admin validasi saja
 let actionRunning = false;
+let certNoMode = 'auto'; // 'auto' = nomor dibuat sistem, 'manual' = admin mengetik nomor saat menyetujui
 
 const $ = function (id) { return document.getElementById(id); };
 
@@ -61,6 +62,7 @@ async function api(action, payload) {
 const CFG_KEY = 'ngabasoCfg';
 
 function applyConfig(cfg) {
+  certNoMode = cfg.certificateNoMode === 'manual' ? 'manual' : 'auto';
   // Teks bawaan ada di index.html; nilai dari backend hanya menimpa jika terisi.
   if (cfg.eventName) { $('eventName').textContent = cfg.eventName; document.title = cfg.eventName + ' - Sertifikat Digital'; }
   if (cfg.eventTheme) $('eventTheme').textContent = cfg.eventTheme;
@@ -228,13 +230,16 @@ function renderSubmissions(items) {
     const actions = document.createElement('div'); actions.className = 'actions';
     if (item.status === 'MENUNGGU VALIDASI') {
       actions.appendChild(actionButton('Setujui & kirim sertifikat', 'primary', async function () {
-        const ok = await showDialog({
+        const manual = certNoMode === 'manual';
+        const dlg = {
           title: 'Setujui dan kirim sertifikat?',
           message: 'Sertifikat akan dibuat dan dikirim melalui email kepada penerima berikut. Tindakan ini tidak dapat dibatalkan.',
           details: [['Penerima', item.fullName], ['Email', item.email], ['Kategori', item.category]],
           confirmText: 'Setujui & kirim', tone: 'primary'
-        });
-        if (ok) runAction('approve', item.id, note.value);
+        };
+        if (manual) dlg.input = { label: 'Nomor sertifikat (diketik manual)', placeholder: 'Contoh: 001/IGI-GARUT/X/2026', required: true, maxLength: 60, hint: 'Nomor ini tercetak pada sertifikat dan harus berbeda untuk setiap penerima.' };
+        const ok = await showDialog(dlg);
+        if (ok) runAction('approve', item.id, note.value, manual ? dlg.inputValue : '');
       }));
       actions.appendChild(actionButton('Tolak data', 'danger', async function () {
         if (!note.value.trim()) {
@@ -307,6 +312,18 @@ function showDialog(opts) {
       box.appendChild(dl);
     }
 
+    let inputEl = null, inputErr = null;
+    if (opts.input) {
+      const wrap = el('div', 'dialogField');
+      const lab = el('label', null, opts.input.label || ''); lab.htmlFor = 'dialogInput';
+      inputEl = el('input'); inputEl.id = 'dialogInput'; inputEl.type = 'text'; inputEl.maxLength = opts.input.maxLength || 60;
+      inputEl.placeholder = opts.input.placeholder || ''; inputEl.value = opts.input.value || ''; inputEl.autocomplete = 'off';
+      inputErr = el('p', 'dialogFieldError hidden'); inputErr.setAttribute('role', 'alert');
+      wrap.append(lab, inputEl, inputErr);
+      if (opts.input.hint) wrap.appendChild(el('small', 'muted', opts.input.hint));
+      box.appendChild(wrap);
+    }
+
     const bar = el('div', 'dialogActions');
     const done = function (value) {
       document.removeEventListener('keydown', onKey, true);
@@ -321,14 +338,21 @@ function showDialog(opts) {
       bar.appendChild(cancelBtn);
     }
     const okBtn = el('button', tone === 'danger' ? 'danger' : 'primary', opts.confirmText || 'Ya, lanjutkan'); okBtn.type = 'button';
-    okBtn.addEventListener('click', function () { done(true); });
+    okBtn.addEventListener('click', function () {
+      if (inputEl) {
+        const v = inputEl.value.trim();
+        if (opts.input.required && !v) { inputErr.textContent = 'Kolom ini wajib diisi.'; inputErr.classList.remove('hidden'); inputEl.focus(); return; }
+        opts.inputValue = v;
+      }
+      done(true);
+    });
     bar.appendChild(okBtn);
     box.appendChild(bar);
 
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(cancelBtn ? false : true); }
       else if (e.key === 'Tab') { // fokus tetap berada di dalam dialog
-        const f = Array.from(box.querySelectorAll('button'));
+        const f = Array.from(box.querySelectorAll('button, input'));
         const i = f.indexOf(document.activeElement);
         e.preventDefault();
         f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
@@ -338,7 +362,7 @@ function showDialog(opts) {
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay && cancelBtn) done(false); });
     overlay.appendChild(box);
     document.body.appendChild(overlay); document.body.classList.add('dialogOpen');
-    (tone === 'danger' && cancelBtn ? cancelBtn : okBtn).focus();
+    (inputEl ? inputEl : (tone === 'danger' && cancelBtn ? cancelBtn : okBtn)).focus();
   });
 }
 
@@ -347,14 +371,16 @@ function actionButton(label, cls, callback) {
   btn.textContent = label; btn.addEventListener('click', callback); return btn;
 }
 
-async function runAction(action, id, note) {
+async function runAction(action, id, note, certificateNo) {
   if (actionRunning) return;
   actionRunning = true;
   const buttons = $('submissionList').querySelectorAll('button');
   buttons.forEach(function (b) { b.disabled = true; });
   message('adminMessage', 'Sedang memproses. Pembuatan PDF dan pengiriman email memerlukan beberapa saat.', '');
   try {
-    const res = await api(action, { token: adminToken, id: id, note: note });
+    const payload = { token: adminToken, id: id, note: note };
+    if (certificateNo) payload.certificateNo = certificateNo;
+    const res = await api(action, payload);
     message('adminMessage', (res && res.message) || 'Proses selesai.', res && res.ok === false ? 'warning' : 'success');
   } catch (err) {
     message('adminMessage', err.message || 'Proses tidak berhasil.', 'error');
@@ -394,7 +420,7 @@ const ASSETS = [
   { key: 'signature', label: 'Tanda tangan & stempel', hint: 'Satu gambar berisi tanda tangan beserta stempel; diletakkan di atas nama penandatangan.' },
   { key: 'background', label: 'Latar sertifikat', wide: true, hint: 'Gambar JPG/PNG ukuran A4 landscape (disarankan 1684 x 1190 px). Gambar dipotong otomatis ke rasio A4 dan dikompres. Hapus untuk memakai latar bawaan. Logo ada di bagian atas tengah, ornamen sebaiknya di sudut agar teks tetap terbaca.' }
 ];
-const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'eventKind', 'eventDuration', 'certificateCode', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle', 'signerNta'];
+const SETTING_FIELDS = ['orgName', 'eventName', 'eventTheme', 'eventDate', 'eventDescription', 'eventKind', 'eventDuration', 'certificateCode', 'certificateNoMode', 'certificatePlace', 'certificateDate', 'signerName', 'signerTitle', 'signerNta'];
 let settingsLoaded = false;
 let DEFAULT_LINEUP = '';
 let customLineup = false;
@@ -746,6 +772,8 @@ async function loadSettings() {
   try {
     const res = await api('getSettings', { token: adminToken });
     SETTING_FIELDS.forEach(function (k) { $('s_' + k).value = res.settings[k] || ''; });
+    if ($('s_certificateNoMode').value !== 'manual') $('s_certificateNoMode').value = 'auto';
+    certNoMode = $('s_certificateNoMode').value;
     if (!$('s_eventDescription').value) $('s_eventDescription').value = DEFAULT_DESC;
     ROLES.forEach(function (r) {
       $('rows-' + r.key).textContent = '';
@@ -776,6 +804,7 @@ async function onSaveSettings(ev) {
   try {
     const res = await api('saveSettings', { token: adminToken, settings: settings });
     message('adminMessage', wordingSupported ? res.message : 'Pengaturan lain disimpan, tetapi redaksi belum tersimpan karena Code.gs belum diperbarui dan di-deploy.', wordingSupported ? 'success' : 'warning');
+    certNoMode = settings.certificateNoMode === 'manual' ? 'manual' : 'auto';
     loadConfig();
   } catch (err) {
     message('adminMessage', err.message || 'Gagal menyimpan.', 'error');
