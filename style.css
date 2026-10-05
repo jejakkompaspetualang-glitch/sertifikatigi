@@ -371,3 +371,10 @@ button.kpi.link:hover { transform:translateY(-2px); box-shadow:0 8px 18px #1d5bf
 @keyframes shimmer { from { background-position:200% 0; } to { background-position:-200% 0; } }
 @media (prefers-reduced-motion:reduce) { .sk { animation:none; } button.kpi.link { transition:none; } }
 @media (max-width:640px) { .statCols { grid-template-columns:1fr; } .pod b { font-size:.76rem; } .pod .av { width:38px; height:38px; } .pod.p1 .av { width:44px; height:44px; } }
+
+/* ===== Isian pada kotak dialog (nomor sertifikat manual) ===== */
+.dialogField { margin-top:16px; text-align:left; }
+.dialogField label { display:block; margin-bottom:6px; font-weight:600; font-size:.88rem; }
+.dialogField input { width:100%; }
+.dialogField small { display:block; margin-top:6px; }
+.dialogFieldError { margin:6px 0 0; color:#d92d20; font-size:.84rem; }
