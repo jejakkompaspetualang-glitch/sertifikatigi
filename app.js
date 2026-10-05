@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 90000; // membuat PDF + mengirim email dapat memakan 
 let adminToken = '';
 let adminRole = ''; // 'super' = super admin (semua fitur), 'validator' = admin validasi saja
 let actionRunning = false;
+let certNoModeSupported = true; // false bila Code.gs di server belum diperbarui
 let certNoMode = 'auto'; // 'auto' = nomor dibuat sistem, 'manual' = admin mengetik nomor saat menyetujui
 
 const $ = function (id) { return document.getElementById(id); };
@@ -774,6 +775,9 @@ async function loadSettings() {
     SETTING_FIELDS.forEach(function (k) { $('s_' + k).value = res.settings[k] || ''; });
     if ($('s_certificateNoMode').value !== 'manual') $('s_certificateNoMode').value = 'auto';
     certNoMode = $('s_certificateNoMode').value;
+    certNoModeSupported = res.settings.certificateNoMode !== undefined;
+    $('s_certificateNoMode').disabled = !certNoModeSupported;
+    syncCertNoUi();
     if (!$('s_eventDescription').value) $('s_eventDescription').value = DEFAULT_DESC;
     ROLES.forEach(function (r) {
       $('rows-' + r.key).textContent = '';
@@ -786,7 +790,8 @@ async function loadSettings() {
     WORDING_DEFAULTS = res.wordingDefaults || FALLBACK_WORDING;
     fillWording(res.wording || WORDING_DEFAULTS);
     settingsLoaded = true;
-    message('adminMessage', wordingSupported ? '' : 'Server (Code.gs) belum diperbarui. Redaksi dan latar sertifikat baru dapat disimpan setelah Code.gs versi terbaru di-deploy sebagai versi baru.', wordingSupported ? '' : 'warning');
+    if (!certNoModeSupported) { message('adminMessage', 'Server (Code.gs) belum diperbarui, sehingga mode nomor manual belum aktif. Tempel Code.gs terbaru lalu Deploy > Kelola deployment > Versi baru.', 'warning'); }
+    else message('adminMessage', wordingSupported ? '' : 'Server (Code.gs) belum diperbarui. Redaksi dan latar sertifikat baru dapat disimpan setelah Code.gs versi terbaru di-deploy sebagai versi baru.', wordingSupported ? '' : 'warning');
   } catch (err) {
     message('adminMessage', err.message || 'Gagal memuat pengaturan.', 'error');
     if (isSessionError(err)) logoutAdmin(false, err.message);
@@ -813,6 +818,19 @@ async function onSaveSettings(ev) {
     setBusy('saveSettingsBtn', false, 'Simpan pengaturan');
   }
 }
+
+function syncCertNoUi() {
+  const manual = $('s_certificateNoMode').value === 'manual';
+  $('s_certificateCode').disabled = manual;
+  const v = $('s_certificateCode').value;
+  const warn = $('certCodeWarn');
+  if (manual) warn.textContent = 'Mode manual aktif: nomor diketik admin saat menyetujui, kolom kode ini tidak dipakai.';
+  else if (/[^A-Za-z0-9._-]/.test(v)) warn.textContent = 'Kode hanya berisi huruf, angka, titik, garis bawah, dan strip. Karakter lain (termasuk "/") akan dibuang. Untuk nomor lengkap yang diketik sendiri, pilih mode Manual.';
+  else warn.textContent = '';
+  warn.classList.toggle('hidden', !warn.textContent);
+}
+$('s_certificateNoMode').addEventListener('change', syncCertNoUi);
+$('s_certificateCode').addEventListener('input', syncCertNoUi);
 
 buildPeopleEditor();
 buildAssetEditor();
