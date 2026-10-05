@@ -14,6 +14,7 @@ let adminToken = '';
 let adminRole = ''; // 'super' = super admin (semua fitur), 'validator' = admin validasi saja
 let actionRunning = false;
 let certNoModeSupported = true; // false bila Code.gs di server belum diperbarui
+let lastManualNo = ''; // nomor manual terakhir yang diketik, diisikan otomatis agar tidak mengetik berulang
 let certNoMode = 'auto'; // 'auto' = nomor dibuat sistem, 'manual' = admin mengetik nomor saat menyetujui
 
 const $ = function (id) { return document.getElementById(id); };
@@ -238,9 +239,9 @@ function renderSubmissions(items) {
           details: [['Penerima', item.fullName], ['Email', item.email], ['Kategori', item.category]],
           confirmText: 'Setujui & kirim', tone: 'primary'
         };
-        if (manual) dlg.input = { label: 'Nomor sertifikat (diketik manual)', placeholder: 'Contoh: 001/IGI-GARUT/X/2026', required: true, maxLength: 60, hint: 'Nomor ini tercetak pada sertifikat dan harus berbeda untuk setiap penerima.' };
+        if (manual) dlg.input = { label: 'Nomor sertifikat (diketik manual)', placeholder: 'Contoh: 001/IGI-GARUT/X/2026', required: true, maxLength: 60, hint: 'Nomor ini tercetak pada sertifikat. Nomor yang sama boleh dipakai untuk banyak penerima dalam satu kegiatan.', value: lastManualNo };
         const ok = await showDialog(dlg);
-        if (ok) runAction('approve', item.id, note.value, manual ? dlg.inputValue : '');
+        if (ok) { if (manual && dlg.inputValue) lastManualNo = dlg.inputValue; runAction('approve', item.id, note.value, manual ? dlg.inputValue : ''); }
       }));
       actions.appendChild(actionButton('Tolak data', 'danger', async function () {
         if (!note.value.trim()) {
