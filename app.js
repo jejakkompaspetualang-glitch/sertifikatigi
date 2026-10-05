@@ -14,8 +14,6 @@ let adminToken = '';
 let adminRole = ''; // 'super' = super admin (semua fitur), 'validator' = admin validasi saja
 let actionRunning = false;
 let certNoModeSupported = true; // false bila Code.gs di server belum diperbarui
-const SESSION_KEY = 'igiAdminSession'; // sesi admin disimpan di sessionStorage: bertahan saat refresh, hilang saat tab ditutup
-const SESSION_MAX_MS = 6 * 3600 * 1000;
 let lastManualNo = ''; // nomor manual terakhir yang diketik, diisikan otomatis agar tidak mengetik berulang
 let certNoMode = 'auto'; // 'auto' = nomor dibuat sistem, 'manual' = admin mengetik nomor saat menyetujui
 
@@ -163,7 +161,6 @@ async function onLogin(ev) {
     adminToken = res.token;
     adminRole = res.role === 'validator' ? 'validator' : 'super';
     try { localStorage.setItem('igiAdminName', res.name || ''); } catch (e) { /* abaikan */ }
-    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ t: adminToken, r: adminRole, at: Date.now() })); } catch (e) { /* abaikan */ }
     applyRole();
     $('loginPanel').classList.add('hidden');
     $('dashboard').classList.remove('hidden');
@@ -401,7 +398,6 @@ function logoutAdmin(callServer, reason) {
   const oldToken = adminToken;
   adminToken = '';
   adminRole = '';
-  try { sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* abaikan */ }
   if (shouldCall && oldToken) api('logout', { token: oldToken }).catch(function () { /* sesi kedaluwarsa sendiri */ });
   $('dashboard').classList.add('hidden');
   $('loginPanel').classList.remove('hidden');
@@ -1343,19 +1339,3 @@ window.addEventListener('resize', function () {
 loadCachedConfig();
 loadConfig();
 loadPublicStats();
-
-/* Pulihkan sesi admin setelah halaman dimuat ulang (token tetap divalidasi server; bila kedaluwarsa otomatis keluar). */
-(function restoreAdminSession() {
-  try {
-    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-    if (!s || !s.t || !(Date.now() - s.at < SESSION_MAX_MS)) { sessionStorage.removeItem(SESSION_KEY); return; }
-    adminToken = String(s.t);
-    adminRole = s.r === 'validator' ? 'validator' : 'super';
-    applyRole();
-    $('loginPanel').classList.add('hidden');
-    $('dashboard').classList.remove('hidden');
-    showView('admin');
-    message('adminMessage', 'Sesi admin dipulihkan.', 'success');
-    loadSubmissions();
-  } catch (e) { /* abaikan: tampilkan halaman login seperti biasa */ }
-})();
