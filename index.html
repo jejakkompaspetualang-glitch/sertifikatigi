@@ -161,7 +161,13 @@
           </fieldset>
           <fieldset>
             <legend>Sertifikat</legend>
-            <label for="s_certificateCode">Kode nomor sertifikat</label>
+            <label for="s_certificateNoMode">Cara penomoran sertifikat</label>
+            <select id="s_certificateNoMode">
+              <option value="auto">Otomatis (dibuat sistem)</option>
+              <option value="manual">Manual (diketik admin saat menyetujui)</option>
+            </select>
+            <p class="muted assetNote">Otomatis: nomor dibuat sistem. Manual: saat menekan "Setujui &amp; kirim", admin mengetik sendiri nomor sertifikatnya. Nomor yang sama tidak dapat dipakai dua kali.</p>
+            <label for="s_certificateCode">Kode nomor sertifikat (untuk mode otomatis)</label>
             <input id="s_certificateCode" maxlength="40" placeholder="IGI-GARUT">
             <p class="muted assetNote">Nomor tercetak: urutan/KODE/bulan romawi/tahun, misalnya 001/IGI-GARUT/X/2026.</p>
             <label for="s_eventDuration">Durasi kegiatan (JP)</label>
