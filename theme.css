@@ -130,3 +130,38 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0
   .tab:hover{background:transparent}.tab.active:hover{background:linear-gradient(135deg,#0b2a7a,#061a52)}
   button:active:not(:disabled){transform:none}
 }
+
+/* ===== Penyempurnaan responsif (hanya tata letak; tidak mengubah perilaku) ===== */
+/* Aturan 2 kolom di atas sebelumnya menimpa aturan satu kolom untuk ponsel di style.css. Tumpuk menjadi satu kolom di bawah 820px. */
+@media (max-width:820px){
+  .statCols{grid-template-columns:minmax(0,1fr)}
+}
+/* Baris angka pada legenda donat, corong, dan rekap petugas boleh turun baris alih-alih keluar dari kartu. */
+.dLegend b,.fnHead,.catHead{flex-wrap:wrap}
+.dLegend b span,.fnHead span,.catHead span{min-width:0}
+/* Kartu data: lencana status tidak terpotong dua baris; nama panjang tetap terbaca. */
+.cardTitle{flex-wrap:wrap}
+.cardTitle h3{flex:1 1 180px;min-width:0}
+.status{white-space:nowrap}
+/* Tabel histori: kolom waktu dan aksi tidak patah huruf; kolom teks diberi lebar nyaman, tabel digeser mendatar di dalam kotaknya. */
+.histTable td{overflow-wrap:break-word}
+.histTable td:nth-child(1),.histTable td:nth-child(2){white-space:nowrap}
+.histTable td:nth-child(3){min-width:200px}
+.histTable td:nth-child(4){min-width:140px}
+.histTable td:nth-child(5){min-width:200px}
+.histTable .tag{white-space:nowrap}
+@media (max-width:640px){
+  /* Sasaran sentuh nyaman untuk tautan PDF. */
+  .fileLink{display:inline-flex;align-items:center;min-height:40px}
+  .catHead{flex-direction:column;gap:2px}
+}
+@media (max-width:480px){
+  /* Isian pengaturan memakai lebar layar lebih penuh. */
+  fieldset{padding:4px 12px 16px}
+}
+@media (max-width:360px){
+  /* Menu atas muat di layar 320px; bila tetap sempit, dapat digeser. */
+  .topnav{overflow-x:auto;scrollbar-width:none}
+  .topnav::-webkit-scrollbar{display:none}
+  .topnav a{padding:8px 7px;font-size:.72rem}
+}
